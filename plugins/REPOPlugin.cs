@@ -16,12 +16,12 @@ namespace ParasTrainer
         public override Color AccentDimColor { get { return Color.FromArgb(0, 100, 100); } }
         public override string IconPath { get { return @"C:\Users\Para\REPOTrainer\app.ico"; } }
         public override string IpcDirectory { get { return Path.Combine(Path.GetTempPath(), "repo_trainer"); } }
-        public override string PluginVersion { get { return "5"; } }
+        public override string PluginVersion { get { return "6"; } }
 
-        private TextBox spdInput, gravInput, grabInput, strInput, moneyInput, valInput, dmgInput;
+        private TextBox spdInput, gravInput, grabInput, strInput, moneyInput, valInput, dmgInput, cartSizeInput;
         private CheckBox[] espChecks;
-        private string[] espKeys = { "Enemies", "Valuables", "Players", "Extraction", "Traps" };
-        private string[] espLabels = { "Enemies", "Valuables ($)", "Players", "Extraction", "Traps" };
+        private string[] espKeys = { "Enemies", "Valuables", "Items", "Players", "Extraction", "Traps" };
+        private string[] espLabels = { "Enemies", "Valuables ($)", "Items", "Players", "Extraction", "Traps" };
         private bool espLoading;
 
         public override void InitDefaultHotkeys(Dictionary<string, Keys> b)
@@ -35,6 +35,7 @@ namespace ParasTrainer
             b["InvisibleToEnemies"] = Keys.F11; b["InfiniteItemEnergy"] = Keys.None;
             b["InfiniteAmmo"] = Keys.None; b["HealSelfLoop"] = Keys.None;
             b["EspEnabled"] = Keys.None; b["InvulnerableValuables"] = Keys.None;
+            b["ResizeCartItems"] = Keys.None;
             b["KillAll"] = Keys.F10; b["FreezeAll"] = Keys.None;
         }
 
@@ -105,6 +106,17 @@ namespace ParasTrainer
             Host.ToggleRow(ic, Theme.ROW_H, "InfiniteAmmo", "Infinite Weapon Ammo");
             y += Theme.ROW_H * 2 + Theme.PAD;
 
+            // CART
+            y = Host.SectionHeader(c, y, "CART");
+            Panel cc = Host.MakeCard(c, y, 2);
+            Host.ToggleRow(cc, 0, "ResizeCartItems", "Resize Items in Cart");
+            Host.Divider(cc, Theme.ROW_H);
+            cartSizeInput = Host.ValueRow(cc, Theme.ROW_H, "Size ×:", "0.5", "Apply", delegate {
+                float v; if (float.TryParse(cartSizeInput.Text, out v) && v > 0)
+                    Host.SendCommand("SET:CartItemScaleVal:" + v.ToString("F2"));
+            });
+            y += Theme.ROW_H * 2 + Theme.PAD;
+
             // STEALTH
             y = Host.SectionHeader(c, y, "STEALTH");
             Panel stc = Host.MakeCard(c, y, 1);
@@ -140,13 +152,13 @@ namespace ParasTrainer
             // ── MAP HACK ──
             y = Host.ColorSectionHeader(c, y, "MAP HACK", Theme.ACCENT_GREEN);
 
-            int espCheckRows = 4;
+            int espCheckRows = 5;
             Panel espc = Host.MakeCard(c, y, espCheckRows);
             Host.ToggleRow(espc, 0, "EspEnabled", "ESP Overlay", true);
             Host.Divider(espc, Theme.ROW_H);
 
-            espChecks = new CheckBox[5];
-            for (int i = 0; i < 5; i++)
+            espChecks = new CheckBox[espKeys.Length];
+            for (int i = 0; i < espKeys.Length; i++)
             {
                 int col = i % 2;
                 int row = i / 2;
@@ -234,38 +246,35 @@ namespace ParasTrainer
             int i;
             if (key == "SpeedMultiplierVal" && spdInput != null)
             {
-                if (float.TryParse(value, out f) && !Host.DirtyInputs.Contains(spdInput))
-                    spdInput.Text = f.ToString("F0");
+                if (float.TryParse(value, out f)) Host.SyncInput(spdInput, f.ToString("F0"));
             }
             else if (key == "GrabRangeMultiplierVal" && grabInput != null)
             {
-                if (float.TryParse(value, out f) && !Host.DirtyInputs.Contains(grabInput))
-                    grabInput.Text = f.ToString("F0");
+                if (float.TryParse(value, out f)) Host.SyncInput(grabInput, f.ToString("F0"));
             }
             else if (key == "GravityScaleVal" && gravInput != null)
             {
-                if (float.TryParse(value, out f) && !Host.DirtyInputs.Contains(gravInput))
-                    gravInput.Text = f.ToString("F2");
+                if (float.TryParse(value, out f)) Host.SyncInput(gravInput, f.ToString("F2"));
             }
             else if (key == "StrengthMultiplierVal" && strInput != null)
             {
-                if (float.TryParse(value, out f) && !Host.DirtyInputs.Contains(strInput))
-                    strInput.Text = f.ToString("F0");
+                if (float.TryParse(value, out f)) Host.SyncInput(strInput, f.ToString("F0"));
             }
             else if (key == "MoneyAmountVal" && moneyInput != null)
             {
-                if (int.TryParse(value, out i) && !Host.DirtyInputs.Contains(moneyInput))
-                    moneyInput.Text = i.ToString();
+                if (int.TryParse(value, out i)) Host.SyncInput(moneyInput, i.ToString());
             }
             else if (key == "ValuableMultiplierVal" && valInput != null)
             {
-                if (float.TryParse(value, out f) && !Host.DirtyInputs.Contains(valInput))
-                    valInput.Text = f.ToString("F0");
+                if (float.TryParse(value, out f)) Host.SyncInput(valInput, f.ToString("F0"));
             }
             else if (key == "DamageMultiplierVal" && dmgInput != null)
             {
-                if (float.TryParse(value, out f) && !Host.DirtyInputs.Contains(dmgInput))
-                    dmgInput.Text = f.ToString("F0");
+                if (float.TryParse(value, out f)) Host.SyncInput(dmgInput, f.ToString("F0"));
+            }
+            else if (key == "CartItemScaleVal" && cartSizeInput != null)
+            {
+                if (float.TryParse(value, out f)) Host.SyncInput(cartSizeInput, f.ToString("F2"));
             }
             else if (key == "EspCats" && espChecks != null)
             {
@@ -312,6 +321,7 @@ namespace ParasTrainer
             if (moneyInput != null) lines.Add("Val_Money=" + moneyInput.Text);
             if (valInput != null) lines.Add("Val_Valuable=" + valInput.Text);
             if (dmgInput != null) lines.Add("Val_Damage=" + dmgInput.Text);
+            if (cartSizeInput != null) lines.Add("Val_CartSize=" + cartSizeInput.Text);
             if (espChecks != null)
             {
                 for (int j = 0; j < espKeys.Length; j++)
@@ -330,6 +340,7 @@ namespace ParasTrainer
             if (data.TryGetValue("Val_Money", out v) && moneyInput != null) moneyInput.Text = v;
             if (data.TryGetValue("Val_Valuable", out v) && valInput != null) valInput.Text = v;
             if (data.TryGetValue("Val_Damage", out v) && dmgInput != null) dmgInput.Text = v;
+            if (data.TryGetValue("Val_CartSize", out v) && cartSizeInput != null) cartSizeInput.Text = v;
             if (espChecks != null)
             {
                 for (int j = 0; j < espKeys.Length; j++)

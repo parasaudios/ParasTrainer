@@ -52,13 +52,25 @@ namespace ParasTrainer
         public event EventHandler Toggled;
         private bool _checked, _hovered;
         private Color _accentColor = Color.FromArgb(110, 90, 220);
+        private float _thumbPos;
+        private float _colorBlend;
+        private Timer _animTimer;
+        private DateTime _lastClickTime = DateTime.MinValue;
 
         public Color AccentColor { get { return _accentColor; } set { _accentColor = value; Invalidate(); } }
+        public bool RecentlyClicked { get { return (DateTime.Now - _lastClickTime).TotalMilliseconds < 1500; } }
 
         public bool Checked
         {
             get { return _checked; }
-            set { if (_checked != value) { _checked = value; Invalidate(); } }
+            set
+            {
+                if (_checked != value)
+                {
+                    _checked = value;
+                    StartAnimation();
+                }
+            }
         }
 
         public ToggleSwitch()
@@ -68,29 +80,81 @@ namespace ParasTrainer
             Size = new Size(44, 24);
             Cursor = Cursors.Hand;
             BackColor = Color.Transparent;
+            _thumbPos = 0f;
+            _colorBlend = 0f;
+            _animTimer = new Timer();
+            _animTimer.Interval = 12;
+            _animTimer.Tick += delegate { AnimStep(); };
+        }
+
+        private void StartAnimation()
+        {
+            _animTimer.Start();
+        }
+
+        private void AnimStep()
+        {
+            float target = _checked ? 1f : 0f;
+            float diff = target - _thumbPos;
+            if (Math.Abs(diff) < 0.02f)
+            {
+                _thumbPos = target;
+                _colorBlend = target;
+                _animTimer.Stop();
+            }
+            else
+            {
+                _thumbPos += diff * 0.28f;
+                _colorBlend += (target - _colorBlend) * 0.22f;
+            }
+            Invalidate();
+        }
+
+        private static Color LerpColor(Color a, Color b, float t)
+        {
+            if (t <= 0f) return a;
+            if (t >= 1f) return b;
+            return Color.FromArgb(
+                a.A + (int)((b.A - a.A) * t),
+                a.R + (int)((b.R - a.R) * t),
+                a.G + (int)((b.G - a.G) * t),
+                a.B + (int)((b.B - a.B) * t));
         }
 
         protected override void OnPaint(PaintEventArgs e)
         {
             Graphics g = e.Graphics;
             g.SmoothingMode = SmoothingMode.AntiAlias;
-            Color track = _checked ? _accentColor
-                : _hovered ? Color.FromArgb(58, 58, 85)
-                : Color.FromArgb(42, 42, 66);
+            Color offColor = _hovered ? Color.FromArgb(58, 58, 85) : Color.FromArgb(42, 42, 66);
+            Color track = LerpColor(offColor, _accentColor, _colorBlend);
             using (SolidBrush b = new SolidBrush(track))
                 g.FillPath(b, Theme.RoundRect(0, 0, Width - 1, Height - 1, Height / 2));
-            if (_checked)
-                using (Pen p = new Pen(Color.FromArgb(40, _accentColor), 3f))
+            if (_colorBlend > 0.05f)
+                using (Pen p = new Pen(Color.FromArgb((int)(40 * _colorBlend), _accentColor), 3f))
                     g.DrawPath(p, Theme.RoundRect(0, 0, Width - 1, Height - 1, Height / 2));
-            int thumbX = _checked ? Width - Height + 3 : 3;
+            float thumbD = Height - 6;
+            float minX = 3f;
+            float maxX = Width - Height + 3f;
+            float thumbX = minX + (maxX - minX) * _thumbPos;
             using (SolidBrush b = new SolidBrush(Color.White))
-                g.FillEllipse(b, thumbX, 3, Height - 6, Height - 6);
+                g.FillEllipse(b, thumbX, 3, thumbD, thumbD);
         }
 
         protected override void OnMouseClick(MouseEventArgs e)
-        { _checked = !_checked; Invalidate(); if (Toggled != null) Toggled(this, EventArgs.Empty); }
-        protected override void OnMouseEnter(EventArgs e) { _hovered = true; Invalidate(); }
-        protected override void OnMouseLeave(EventArgs e) { _hovered = false; Invalidate(); }
+        {
+            _checked = !_checked;
+            _lastClickTime = DateTime.Now;
+            StartAnimation();
+            if (Toggled != null) Toggled(this, EventArgs.Empty);
+        }
+        protected override void OnMouseEnter(EventArgs e) { _hovered = true; Invalidate(); base.OnMouseEnter(e); }
+        protected override void OnMouseLeave(EventArgs e) { _hovered = false; Invalidate(); base.OnMouseLeave(e); }
+
+        protected override void Dispose(bool disposing)
+        {
+            if (disposing && _animTimer != null) { _animTimer.Stop(); _animTimer.Dispose(); }
+            base.Dispose(disposing);
+        }
     }
 
     public class BufferedPanel : Panel
@@ -115,6 +179,18 @@ namespace ParasTrainer
         public Dictionary<string, Keys> HotkeyBindings = new Dictionary<string, Keys>();
         public Dictionary<string, Button> HotkeyButtons = new Dictionary<string, Button>();
         public HashSet<TextBox> DirtyInputs = new HashSet<TextBox>();
+        public Dictionary<TextBox, DateTime> AppliedAt = new Dictionary<TextBox, DateTime>();
+
+        public void SyncInput(TextBox tb, string statusVal)
+        {
+            if (!DirtyInputs.Contains(tb)) { tb.Text = statusVal; return; }
+            DateTime applied;
+            bool wasApplied = AppliedAt.TryGetValue(tb, out applied);
+            if (wasApplied && tb.Text.Trim() == statusVal.Trim())
+            { DirtyInputs.Remove(tb); AppliedAt.Remove(tb); }
+            else if (wasApplied && (DateTime.Now - applied).TotalSeconds > 3)
+            { DirtyInputs.Remove(tb); AppliedAt.Remove(tb); tb.Text = statusVal; }
+        }
 
         public void SendCommand(string cmd)
         {
@@ -130,8 +206,10 @@ namespace ParasTrainer
         public void SyncToggle(string feature, bool state)
         {
             if (!ToggleSwitches.ContainsKey(feature)) return;
+            ToggleSwitch sw = ToggleSwitches[feature];
+            if (sw.RecentlyClicked && sw.Checked != state) return;
             FeatureStates[feature] = state;
-            ToggleSwitches[feature].Checked = state;
+            sw.Checked = state;
             if (FeatureLabels.ContainsKey(feature))
                 FeatureLabels[feature].ForeColor = state ? AccentColor : Theme.TEXT_PRIMARY;
         }
@@ -234,9 +312,12 @@ namespace ParasTrainer
             card.Controls.Add(lbl);
 
             TextBox tb = MakeInput(card, 130, rowY + 8, 80, defVal);
+            PluginHost host = this;
+            tb.TextChanged += delegate { host.DirtyInputs.Add(tb); };
 
             Button btn = ActionBtn(card, 218, rowY + 7, btnText, 56);
             btn.Click += onClick;
+            btn.Click += delegate { host.AppliedAt[tb] = DateTime.Now; };
 
             return tb;
         }

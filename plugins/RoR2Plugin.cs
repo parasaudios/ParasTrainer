@@ -521,8 +521,7 @@ namespace ParasTrainer
             int i;
             if (key == "ItemMultiplierVal" && itemMultInput != null)
             {
-                if (int.TryParse(value, out i) && !Host.DirtyInputs.Contains(itemMultInput))
-                    itemMultInput.Text = i.ToString();
+                if (int.TryParse(value, out i)) Host.SyncInput(itemMultInput, i.ToString());
             }
             else if (key == "IemDamage" && iemDmg != null)
             {
@@ -550,8 +549,7 @@ namespace ParasTrainer
             }
             else if (key == "VacuumRange" && vacuumRange != null)
             {
-                if (float.TryParse(value, out f) && !Host.DirtyInputs.Contains(vacuumRange))
-                    vacuumRange.Text = f.ToString("F0");
+                if (float.TryParse(value, out f)) Host.SyncInput(vacuumRange, f.ToString("F0"));
             }
             else if (key == "EspCats" && espChecks != null)
             {

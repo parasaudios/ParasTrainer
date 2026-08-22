@@ -166,8 +166,7 @@ namespace ParasTrainer
             float f;
             if (key == "PayoutMultiplier" && multInput != null)
             {
-                if (float.TryParse(value, out f) && !Host.DirtyInputs.Contains(multInput))
-                    multInput.Text = f.ToString("F0");
+                if (float.TryParse(value, out f)) Host.SyncInput(multInput, f.ToString("F0"));
             }
             else if (value == "0" || value == "1")
             {

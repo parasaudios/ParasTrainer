@@ -37,6 +37,7 @@ namespace ParasTrainer
 
         bool[] isConnected;
         bool[] isLaunching;
+        DateTime[] launchTime;
         int[] patchesOk;
         int[] patchesFail;
         string[] coreVersion;
@@ -140,6 +141,7 @@ namespace ParasTrainer
             gameIcons = new Icon[n];
             isConnected = new bool[n];
             isLaunching = new bool[n];
+            launchTime = new DateTime[n];
             patchesOk = new int[n];
             patchesFail = new int[n];
             coreVersion = new string[n];
@@ -330,19 +332,18 @@ namespace ParasTrainer
             hdrTitle.AutoSize = true;
             headerPanel.Controls.Add(hdrTitle);
 
-            hdrVersion = new Label();
-            hdrVersion.Font = new Font("Segoe UI", 8f);
-            hdrVersion.ForeColor = Theme.TEXT_DISABLED;
-            hdrVersion.Location = new Point(22, 42);
-            hdrVersion.AutoSize = true;
-            headerPanel.Controls.Add(hdrVersion);
-
             hdrSubtitle = new Label();
             hdrSubtitle.Font = new Font("Segoe UI", 8.5f);
             hdrSubtitle.ForeColor = Theme.TEXT_SECONDARY;
             hdrSubtitle.Location = new Point(22, 42);
             hdrSubtitle.AutoSize = true;
             headerPanel.Controls.Add(hdrSubtitle);
+
+            hdrVersion = new Label();
+            hdrVersion.Font = new Font("Segoe UI", 8f);
+            hdrVersion.ForeColor = Theme.TEXT_DISABLED;
+            hdrVersion.AutoSize = true;
+            headerPanel.Controls.Add(hdrVersion);
 
             hdrPlayBtn = new Button();
             hdrPlayBtn.FlatStyle = FlatStyle.Flat;
@@ -479,6 +480,8 @@ namespace ParasTrainer
             hdrTitle.ForeColor = accent;
             hdrSubtitle.Text = plugins[idx].GameName;
             hdrVersion.Text = coreVersion[idx].Length > 0 ? "v" + coreVersion[idx] : "";
+            int subtitleW = TextRenderer.MeasureText(hdrSubtitle.Text, hdrSubtitle.Font).Width;
+            hdrVersion.Location = new Point(22 + subtitleW, 43);
 
             if (isConnected[idx])
             {
@@ -534,6 +537,7 @@ namespace ParasTrainer
             if (selectedGame < 0) return;
             if (isConnected[selectedGame] || isLaunching[selectedGame]) return;
             isLaunching[selectedGame] = true;
+            launchTime[selectedGame] = DateTime.Now;
             UpdateHeader(selectedGame);
             try { Process.Start("steam://rungameid/" + plugins[selectedGame].SteamId); } catch { }
         }
@@ -544,6 +548,17 @@ namespace ParasTrainer
         {
             for (int i = 0; i < plugins.Length; i++)
             {
+                if (isLaunching[i] && !isConnected[i])
+                {
+                    double elapsed = (DateTime.Now - launchTime[i]).TotalSeconds;
+                    if (elapsed > 90 || (elapsed > 10 && Process.GetProcessesByName(plugins[i].ProcessName).Length == 0))
+                    {
+                        isLaunching[i] = false;
+                        if (i == selectedGame) UpdateHeader(i);
+                        UpdateSidebar();
+                    }
+                }
+
                 if (panelBuilt[i])
                     PollGame(i);
                 else
