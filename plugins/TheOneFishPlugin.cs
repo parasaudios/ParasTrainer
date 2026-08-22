@@ -16,7 +16,7 @@ namespace ParasTrainer
         public override Color AccentDimColor { get { return Color.FromArgb(20, 60, 82); } }
         public override string IconPath { get { return @"C:\Users\Para\OneFishTrainer\app.ico"; } }
         public override string IpcDirectory { get { return Path.Combine(Path.GetTempPath(), "onefish_trainer"); } }
-        public override string PluginVersion { get { return "2"; } }
+        public override string PluginVersion { get { return "3"; } }
 
         private TextBox currencyInput;
         private Label liveHealth, liveHunger, liveCurrency, liveHost;
@@ -44,37 +44,20 @@ namespace ParasTrainer
             liveHost = Mk(lc, 200, 8 + Theme.ROW_H, "Host: -");
             y += Theme.ROW_H * 2 + Theme.PAD;
 
-            // note
-            Panel nc = Host.MakeCard(c, y, 1);
+            Panel ncp = Host.MakeCard(c, y, 1);
             Label note = new Label();
-            note.Text = "Most cheats apply when you host or play solo. Fishing + No Knockback work as a guest too.";
+            note.Text = "Green = works even as a guest. Amber = only when you host or play solo (see Host above).";
             note.Font = new Font("Segoe UI", 8f, FontStyle.Italic);
             note.ForeColor = Theme.TEXT_SECONDARY;
             note.Location = new Point(Theme.PAD + 2, 8);
             note.MaximumSize = new Size(Theme.CARD_W - Theme.PAD, 0);
             note.AutoSize = true;
-            nc.Controls.Add(note);
+            ncp.Controls.Add(note);
             y += Theme.ROW_H + Theme.PAD;
 
-            // ── SURVIVAL ──
-            y = Host.SectionHeader(c, y, "SURVIVAL");
-            Panel sc = Host.MakeCard(c, y, 6);
-            Host.ToggleRow(sc, 0, "GodMode", "God Mode (blocks all damage)");
-            Host.Divider(sc, Theme.ROW_H);
-            Host.ToggleRow(sc, Theme.ROW_H, "NoHunger", "No Hunger");
-            Host.Divider(sc, Theme.ROW_H * 2);
-            Host.ToggleRow(sc, Theme.ROW_H * 2, "NoDrowning", "No Drowning");
-            Host.Divider(sc, Theme.ROW_H * 3);
-            Host.ToggleRow(sc, Theme.ROW_H * 3, "NoKnockback", "No Knockback");
-            Host.Divider(sc, Theme.ROW_H * 4);
-            Host.ToggleRow(sc, Theme.ROW_H * 4, "AutoRevive", "Auto-Revive on Death");
-            Host.Divider(sc, Theme.ROW_H * 5);
-            Button rev = Host.ActionBtn(sc, Theme.PAD, Theme.ROW_H * 5 + 7, "Revive / Heal Now", Theme.CARD_W - Theme.PAD * 2);
-            rev.BackColor = Color.FromArgb(10, 60, 40); rev.ForeColor = Theme.ACCENT_GREEN;
-            rev.Click += delegate { Host.SendCommand("ACTION:Revive"); };
-            y += Theme.ROW_H * 6 + Theme.PAD;
+            // ══ WORKS AS NON-HOST (client-side — applies even as a guest) ══
+            y = Host.ColorSectionHeader(c, y, "WORKS AS NON-HOST", Theme.ACCENT_GREEN);
 
-            // ── FISHING (works as guest) ──
             y = Host.SectionHeader(c, y, "FISHING");
             Panel fc = Host.MakeCard(c, y, 3);
             Host.ToggleRow(fc, 0, "EasyFishing", "Easy Fishing (never fail catch)");
@@ -84,7 +67,29 @@ namespace ParasTrainer
             Host.ToggleRow(fc, Theme.ROW_H * 2, "AutoHotspot", "Auto Hotspot (bonus fish anywhere)");
             y += Theme.ROW_H * 3 + Theme.PAD;
 
-            // ── ECONOMY ──
+            y = Host.SectionHeader(c, y, "DEFENSE");
+            Panel dc = Host.MakeCard(c, y, 1);
+            Host.ToggleRow(dc, 0, "NoKnockback", "No Knockback");
+            y += Theme.ROW_H + Theme.PAD;
+
+            // ══ HOST / SOLO ONLY (server-authoritative) ══
+            y = Host.ColorSectionHeader(c, y, "HOST / SOLO ONLY", Theme.ACCENT_AMBER);
+
+            y = Host.SectionHeader(c, y, "SURVIVAL");
+            Panel sc = Host.MakeCard(c, y, 5);
+            Host.ToggleRow(sc, 0, "GodMode", "God Mode (blocks all damage)");
+            Host.Divider(sc, Theme.ROW_H);
+            Host.ToggleRow(sc, Theme.ROW_H, "NoHunger", "No Hunger");
+            Host.Divider(sc, Theme.ROW_H * 2);
+            Host.ToggleRow(sc, Theme.ROW_H * 2, "NoDrowning", "No Drowning");
+            Host.Divider(sc, Theme.ROW_H * 3);
+            Host.ToggleRow(sc, Theme.ROW_H * 3, "AutoRevive", "Auto-Revive (keeps inventory)");
+            Host.Divider(sc, Theme.ROW_H * 4);
+            Button rev = Host.ActionBtn(sc, Theme.PAD, Theme.ROW_H * 4 + 7, "Revive / Heal Now", Theme.CARD_W - Theme.PAD * 2);
+            rev.BackColor = Color.FromArgb(10, 60, 40); rev.ForeColor = Theme.ACCENT_GREEN;
+            rev.Click += delegate { Host.SendCommand("ACTION:Revive"); };
+            y += Theme.ROW_H * 5 + Theme.PAD;
+
             y = Host.SectionHeader(c, y, "ECONOMY ($)");
             Panel ec = Host.MakeCard(c, y, 2);
             currencyInput = Host.ValueRow(ec, 0, "Amount:", "99999", "Set", delegate {
@@ -99,19 +104,16 @@ namespace ParasTrainer
             };
             y += Theme.ROW_H * 2 + Theme.PAD;
 
-            // ── SHOP ──
             y = Host.SectionHeader(c, y, "SHOP");
             Panel shc = Host.MakeCard(c, y, 1);
             Host.ToggleRow(shc, 0, "FreeShop", "Free Shop (everything costs 0)");
             y += Theme.ROW_H + Theme.PAD;
 
-            // ── COMBAT ──
             y = Host.SectionHeader(c, y, "COMBAT");
             Panel coc = Host.MakeCard(c, y, 1);
             Host.ToggleRow(coc, 0, "KillEnemies", "Instant-Kill Enemies");
             y += Theme.ROW_H + Theme.PAD;
 
-            // ── BOONS ──
             y = Host.SectionHeader(c, y, "BOONS");
             Panel bc = Host.MakeCard(c, y, 1);
             Button mb = Host.ActionBtn(bc, Theme.PAD, 7, "Max All Boons", Theme.CARD_W - Theme.PAD * 2);
