@@ -27,6 +27,7 @@ namespace ParasTrainer
             b["GodMode"] = Keys.None; b["NoHunger"] = Keys.None; b["NoDrowning"] = Keys.None;
             b["NoKnockback"] = Keys.None; b["AutoRevive"] = Keys.None; b["KillEnemies"] = Keys.None;
             b["EasyFishing"] = Keys.None; b["BestFish"] = Keys.None; b["AutoHotspot"] = Keys.None;
+            b["Shiny"] = Keys.None; b["BigSize"] = Keys.None;
             b["FreeShop"] = Keys.None; b["NeverSoldOut"] = Keys.None; b["SetCurrency"] = Keys.None;
             b["AddCurrency"] = Keys.None; b["Revive"] = Keys.None; b["MaxBoons"] = Keys.None;
         }
@@ -59,13 +60,17 @@ namespace ParasTrainer
             y = Host.ColorSectionHeader(c, y, "WORKS AS NON-HOST", Theme.ACCENT_GREEN);
 
             y = Host.SectionHeader(c, y, "FISHING");
-            Panel fc = Host.MakeCard(c, y, 3);
+            Panel fc = Host.MakeCard(c, y, 5);
             Host.ToggleRow(fc, 0, "EasyFishing", "Easy Fishing (never fail catch)");
             Host.Divider(fc, Theme.ROW_H);
-            Host.ToggleRow(fc, Theme.ROW_H, "BestFish", "Always Best Fish (Mythical + max size)");
+            Host.ToggleRow(fc, Theme.ROW_H, "BestFish", "Always Mythical (best rarity)");
             Host.Divider(fc, Theme.ROW_H * 2);
-            Host.ToggleRow(fc, Theme.ROW_H * 2, "AutoHotspot", "Auto Hotspot (bonus fish anywhere)");
-            y += Theme.ROW_H * 3 + Theme.PAD;
+            Host.ToggleRow(fc, Theme.ROW_H * 2, "Shiny", "Always Shiny");
+            Host.Divider(fc, Theme.ROW_H * 3);
+            Host.ToggleRow(fc, Theme.ROW_H * 3, "BigSize", "Always Max Size");
+            Host.Divider(fc, Theme.ROW_H * 4);
+            Host.ToggleRow(fc, Theme.ROW_H * 4, "AutoHotspot", "Auto Hotspot (bonus fish anywhere)");
+            y += Theme.ROW_H * 5 + Theme.PAD;
 
             y = Host.SectionHeader(c, y, "DEFENSE");
             Panel dc = Host.MakeCard(c, y, 1);
@@ -155,7 +160,8 @@ namespace ParasTrainer
         {
             if (action == "GodMode" || action == "NoHunger" || action == "NoDrowning" || action == "NoKnockback"
                 || action == "AutoRevive" || action == "KillEnemies" || action == "EasyFishing"
-                || action == "BestFish" || action == "AutoHotspot" || action == "FreeShop" || action == "NeverSoldOut")
+                || action == "BestFish" || action == "AutoHotspot" || action == "FreeShop" || action == "NeverSoldOut"
+                || action == "Shiny" || action == "BigSize")
                 Host.SendCommand("TOGGLE:" + action);
             else
                 Host.SendCommand("ACTION:" + action);
