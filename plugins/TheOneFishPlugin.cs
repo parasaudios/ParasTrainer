@@ -27,8 +27,8 @@ namespace ParasTrainer
             b["GodMode"] = Keys.None; b["NoHunger"] = Keys.None; b["NoDrowning"] = Keys.None;
             b["NoKnockback"] = Keys.None; b["AutoRevive"] = Keys.None; b["KillEnemies"] = Keys.None;
             b["EasyFishing"] = Keys.None; b["BestFish"] = Keys.None; b["AutoHotspot"] = Keys.None;
-            b["FreeShop"] = Keys.None; b["SetCurrency"] = Keys.None; b["AddCurrency"] = Keys.None;
-            b["Revive"] = Keys.None; b["MaxBoons"] = Keys.None;
+            b["FreeShop"] = Keys.None; b["NeverSoldOut"] = Keys.None; b["SetCurrency"] = Keys.None;
+            b["AddCurrency"] = Keys.None; b["Revive"] = Keys.None; b["MaxBoons"] = Keys.None;
         }
 
         public override void BuildPanel(Panel c)
@@ -105,9 +105,11 @@ namespace ParasTrainer
             y += Theme.ROW_H * 2 + Theme.PAD;
 
             y = Host.SectionHeader(c, y, "SHOP");
-            Panel shc = Host.MakeCard(c, y, 1);
+            Panel shc = Host.MakeCard(c, y, 2);
             Host.ToggleRow(shc, 0, "FreeShop", "Free Shop (everything costs 0)");
-            y += Theme.ROW_H + Theme.PAD;
+            Host.Divider(shc, Theme.ROW_H);
+            Host.ToggleRow(shc, Theme.ROW_H, "NeverSoldOut", "Never Sold Out (unlimited stock)");
+            y += Theme.ROW_H * 2 + Theme.PAD;
 
             y = Host.SectionHeader(c, y, "COMBAT");
             Panel coc = Host.MakeCard(c, y, 1);
@@ -153,7 +155,7 @@ namespace ParasTrainer
         {
             if (action == "GodMode" || action == "NoHunger" || action == "NoDrowning" || action == "NoKnockback"
                 || action == "AutoRevive" || action == "KillEnemies" || action == "EasyFishing"
-                || action == "BestFish" || action == "AutoHotspot" || action == "FreeShop")
+                || action == "BestFish" || action == "AutoHotspot" || action == "FreeShop" || action == "NeverSoldOut")
                 Host.SendCommand("TOGGLE:" + action);
             else
                 Host.SendCommand("ACTION:" + action);
