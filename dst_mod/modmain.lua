@@ -15,6 +15,7 @@
 
 local _G = GLOBAL
 local io = _G.io
+local pcall = _G.pcall   -- the mod-env whitelist omits pcall/tonumber/etc; reach them via _G
 
 -- ── IPC paths (must match DSTPlugin.IpcDirectory in ParasTrainer) ──
 local IPC = "J:\\SteamLibrary\\steamapps\\common\\Don't Starve Together\\mods\\paras_trainer\\ipc\\"
