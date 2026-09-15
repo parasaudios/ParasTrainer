@@ -76,6 +76,8 @@ namespace ParasTrainer
 
         private Label liveHealth, liveHunger, liveSanity, liveAdmin, installLabel;
         private Timer setupTimer;
+        private Panel playersPanel;      // dynamic per-player heal/revive rows
+        private string lastPlayers = ""; // last Players= value, to rebuild only on change
         private long cmdSeq;   // last command seq we wrote
         private long ackSeq;   // last seq the mod reports having processed
 
@@ -101,14 +103,22 @@ namespace ParasTrainer
 
             Panel ncp = Host.MakeCard(c, y, 1);
             Label note = new Label();
-            note.Text = "Live control of your running game. \"Connected\" above needs the mod enabled "
-                      + "in-game and you hosting (admin). The same actions are on F1-F7 in-game.";
+            note.Text = "Live control of your running game (same actions are on F1-F7 in-game). "
+                      + "Turn on \"Apply to ALL players\" to make every cheat and button below affect "
+                      + "the whole party; leave it off and they only affect you. Heal/revive a single "
+                      + "member from the PLAYERS list at the bottom.";
             note.Font = new Font("Segoe UI", 8f, FontStyle.Italic);
             note.ForeColor = Theme.TEXT_SECONDARY;
             note.Location = new Point(Theme.PAD + 2, 8);
             note.MaximumSize = new Size(Theme.CARD_W - Theme.PAD, 0);
             note.AutoSize = true;
             ncp.Controls.Add(note);
+            y += Theme.ROW_H + Theme.PAD;
+
+            // ── Scope ──
+            y = Host.SectionHeader(c, y, "SCOPE");
+            Panel pcard = Host.MakeCard(c, y, 1);
+            DstToggleRow(pcard, 0, "party", "Apply to ALL players (party-wide)");
             y += Theme.ROW_H + Theme.PAD;
 
             // ── Toggles ──
@@ -143,7 +153,13 @@ namespace ParasTrainer
             howto.Click += delegate { ShowEnableHelp(); };
             y += Theme.ROW_H * 3 + Theme.PAD;
 
-            Host.AddSpacer(c, y, 20);
+            // ── Players (per-member heal/revive; populated live from status) ──
+            y = Host.SectionHeader(c, y, "PLAYERS (heal / revive)");
+            playersPanel = new BufferedPanel();
+            playersPanel.SetBounds(Theme.PAD, y, Theme.CARD_W, Theme.ROW_H + 20);
+            playersPanel.BackColor = Theme.BG_MAIN;
+            c.Controls.Add(playersPanel);
+            RebuildPlayers("");
 
             RefreshSetup();
             setupTimer = new Timer();
@@ -286,6 +302,53 @@ namespace ParasTrainer
             lbl.Text = name + ": " + (value == "-1" ? "-" : value + "%");
         }
 
+        // Rebuild the per-player heal/revive rows from a "uid~name;uid~name;" list.
+        private void RebuildPlayers(string val)
+        {
+            if (playersPanel == null) return;
+            playersPanel.SuspendLayout();
+            playersPanel.Controls.Clear();
+            string[] entries = (val ?? "").Split(new char[] { ';' }, StringSplitOptions.RemoveEmptyEntries);
+            int rowY = 0;
+            if (entries.Length == 0)
+            {
+                Label none = new Label();
+                none.Text = "No players yet — connect and host to see the party.";
+                none.Font = new Font("Segoe UI", 8.5f, FontStyle.Italic);
+                none.ForeColor = Theme.TEXT_SECONDARY;
+                none.Location = new Point(Theme.PAD + 2, 8);
+                none.AutoSize = true;
+                playersPanel.Controls.Add(none);
+                rowY = Theme.ROW_H;
+            }
+            else
+            {
+                foreach (string e in entries)
+                {
+                    int t = e.IndexOf('~');
+                    string uid = t > 0 ? e.Substring(0, t) : e;
+                    string name = t >= 0 ? e.Substring(t + 1) : e;
+                    string capUid = uid; // capture per-iteration for the closure
+
+                    Label nm = new Label();
+                    nm.Text = name;
+                    nm.Font = new Font("Segoe UI", 9.5f);
+                    nm.ForeColor = Theme.TEXT_PRIMARY;
+                    nm.AutoEllipsis = true;
+                    nm.SetBounds(Theme.PAD, rowY + 10, Theme.CARD_W - 150, 20);
+                    playersPanel.Controls.Add(nm);
+
+                    Button b = Host.ActionBtn(playersPanel, Theme.CARD_W - 132, rowY + 7, "Heal / Revive", 120);
+                    b.ForeColor = Theme.ACCENT_GREEN;
+                    b.Click += delegate { Dst("revive:" + capUid); };
+
+                    rowY += Theme.ROW_H;
+                }
+            }
+            playersPanel.Height = rowY + 8;
+            playersPanel.ResumeLayout();
+        }
+
         public override void ParseStatus(string key, string value)
         {
             if (key == "Health") SetStat(liveHealth, "Health", value);
@@ -304,6 +367,11 @@ namespace ParasTrainer
             else if (key == "GodMode") Host.SyncToggle("god", value == "1");
             else if (key == "FreeCraft") Host.SyncToggle("freecraft", value == "1");
             else if (key == "Speed") Host.SyncToggle("speed", value == "1");
+            else if (key == "Party") Host.SyncToggle("party", value == "1");
+            else if (key == "Players")
+            {
+                if (value != lastPlayers) { lastPlayers = value; RebuildPlayers(value); }
+            }
             // InGame: informational; buttons simply no-op server-side when not in game.
         }
 

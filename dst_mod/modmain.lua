@@ -22,7 +22,8 @@ local PS_CMD = "command.txt"       -- trainer -> mod (read via GetPersistentStri
 local PS_STATUS = "status.txt"     -- mod -> trainer (written via SetPersistentString)
 
 -- Tracked toggle state (source of truth for the toggles this mod manages).
-local state = { god = false, freecraft = false, speed = false }
+-- `party` = apply cheats to ALL players (not just the casting admin).
+local state = { god = false, freecraft = false, speed = false, party = false }
 
 -- ── Command execution ──────────────────────────────────────────────────────
 
@@ -46,65 +47,79 @@ local function Notify(msg)
     _G.print("[Para Trainer] " .. msg)
 end
 
-local function SetSpeed(on)
-    if on == state.speed then return end
-    state.speed = on
-    if on then
-        Run([[local p=ConsoleCommandPlayer() if p and p.components and p.components.locomotor then p.components.locomotor:SetExternalSpeedMultiplier(p,"paras_trainer",2) end]])
+-- Server-side per-player operations (var 'p'). Applied to the caster (solo) or
+-- every player (party-wide) via Apply(). Same component methods the c_ commands
+-- use internally, so solo behaviour matches the built-in cheats.
+local SNIP_GOD_ON    = [[if p.components.health then p.components.health:SetInvincible(true) end]]
+local SNIP_GOD_OFF   = [[if p.components.health then p.components.health:SetInvincible(false) end]]
+local SNIP_REFILL    = [[if not p:HasTag("playerghost") then if p.components.health then p.components.health:SetPercent(1) end if p.components.sanity then p.components.sanity:SetPercent(1) end if p.components.hunger then p.components.hunger:SetPercent(1) end end]]
+local SNIP_COMFORT   = [[if p.components.moisture then p.components.moisture:SetPercent(0) end if p.components.temperature then p.components.temperature:SetTemperature(25) end]]
+local SNIP_FC_ON     = [[if p.components.builder and not p.components.builder.freebuildmode then p.components.builder:GiveAllRecipes() p:PushEvent("techlevelchange") end]]
+local SNIP_FC_OFF    = [[if p.components.builder and p.components.builder.freebuildmode then p.components.builder:GiveAllRecipes() p:PushEvent("techlevelchange") end]]
+local SNIP_SPEED_ON  = [[if p.components.locomotor then p.components.locomotor:SetExternalSpeedMultiplier(p,"paras_trainer",2) end]]
+local SNIP_SPEED_OFF = [[if p.components.locomotor then p.components.locomotor:RemoveExternalSpeedMultiplier(p,"paras_trainer") end]]
+local SNIP_RESTORE   = [[if p.components.health then p.components.health:SetInvincible(true) if not p:HasTag("playerghost") then p.components.health:SetPercent(1) end end if p.components.sanity then p.components.sanity:SetPercent(1) end if p.components.hunger then p.components.hunger:SetPercent(1) end if p.components.moisture then p.components.moisture:SetPercent(0) end if p.components.temperature then p.components.temperature:SetTemperature(25) end]]
+-- Heal a living player fully, or bring a ghost back to life.
+local SNIP_REVIVE    = [[if p:HasTag("playerghost") then p:PushEvent("respawnfromghost") else if p.components.health then p.components.health:SetPercent(1) end if p.components.sanity then p.components.sanity:SetPercent(1) end if p.components.hunger then p.components.hunger:SetPercent(1) end end]]
+
+-- Apply a per-player snippet to the caster (solo) or all players (party-wide).
+local function Apply(perPlayer)
+    if state.party then
+        Run("for k,p in ipairs(AllPlayers) do " .. perPlayer .. " end")
     else
-        Run([[local p=ConsoleCommandPlayer() if p and p.components and p.components.locomotor then p.components.locomotor:RemoveExternalSpeedMultiplier(p,"paras_trainer") end]])
+        Run("local p = ConsoleCommandPlayer() if p then " .. perPlayer .. " end")
     end
 end
 
-local function DoRevive()
-    local p = _G.ThePlayer
-    if p ~= nil and p.HasTag and p:HasTag("playerghost") then
-        Run("c_godmode()")
-        state.god = false
-    else
-        Run("c_sethealth(1) c_setsanity(1) c_sethunger(1)")
-    end
+-- Apply a per-player snippet to one specific player, by userid.
+local function ApplyTo(userid, perPlayer)
+    Run("local p = UserToPlayer(\"" .. userid .. "\") if p then " .. perPlayer .. " end")
 end
 
 local function Handle(token)
+    -- Scope toggle (doesn't require being in-game).
+    if token == "party:on" then state.party = true; Notify("Party-wide: ON (cheats affect ALL players)"); return end
+    if token == "party:off" then state.party = false; Notify("Party-wide: OFF (just you)"); return end
+
+    -- Targeted heal/revive for a specific player: "revive:<userid>".
+    if token:sub(1, 7) == "revive:" then
+        if not CanCheat() then Notify("needs server admin"); return end
+        ApplyTo(token:sub(8), SNIP_REVIVE)
+        Notify("Heal / Revive sent to player")
+        return
+    end
+
     if not CanCheat() then
         Notify("needs server admin — host your own world")
         return
     end
+    local who = state.party and "everyone" or "you"
     if token == "restore" then
-        if not state.god then Run("c_godmode()"); state.god = true end
-        Run("c_sethealth(1) c_setsanity(1) c_sethunger(1) c_setmoisture(0) c_settemperature(25)")
-        Notify("Full Restore (God Mode on, stats full, comfy)")
+        Apply(SNIP_RESTORE); state.god = true; Notify("Full Restore for " .. who)
     elseif token == "god:on" then
-        if not state.god then Run("c_godmode()"); state.god = true end
-        Notify("God Mode ON")
+        Apply(SNIP_GOD_ON); state.god = true; Notify("God Mode ON (" .. who .. ")")
     elseif token == "god:off" then
-        if state.god then Run("c_godmode()"); state.god = false end
-        Notify("God Mode OFF")
+        Apply(SNIP_GOD_OFF); state.god = false; Notify("God Mode OFF (" .. who .. ")")
     elseif token == "god:toggle" then
         Handle(state.god and "god:off" or "god:on")
     elseif token == "freecraft:on" then
-        if not state.freecraft then Run("c_freecrafting()"); state.freecraft = true end
-        Notify("Free Crafting ON")
+        Apply(SNIP_FC_ON); state.freecraft = true; Notify("Free Crafting ON (" .. who .. ")")
     elseif token == "freecraft:off" then
-        if state.freecraft then Run("c_freecrafting()"); state.freecraft = false end
-        Notify("Free Crafting OFF")
+        Apply(SNIP_FC_OFF); state.freecraft = false; Notify("Free Crafting OFF (" .. who .. ")")
     elseif token == "freecraft:toggle" then
         Handle(state.freecraft and "freecraft:off" or "freecraft:on")
     elseif token == "refill" then
-        Run("c_sethealth(1) c_setsanity(1) c_sethunger(1)")
-        Notify("Health / Sanity / Hunger refilled")
+        Apply(SNIP_REFILL); Notify("Refilled " .. who)
     elseif token == "comfort" then
-        Run("c_setmoisture(0) c_settemperature(25)")
-        Notify("Dried off + comfortable temperature")
+        Apply(SNIP_COMFORT); Notify("Comfort for " .. who)
     elseif token == "speed:on" then
-        SetSpeed(true); Notify("Move Speed x2 ON")
+        Apply(SNIP_SPEED_ON); state.speed = true; Notify("Move Speed x2 ON (" .. who .. ")")
     elseif token == "speed:off" then
-        SetSpeed(false); Notify("Move Speed x2 OFF")
+        Apply(SNIP_SPEED_OFF); state.speed = false; Notify("Move Speed x2 OFF (" .. who .. ")")
     elseif token == "speed:toggle" then
-        SetSpeed(not state.speed); Notify("Move Speed x2 " .. (state.speed and "ON" or "OFF"))
+        Handle(state.speed and "speed:off" or "speed:on")
     elseif token == "revive" then
-        DoRevive(); Notify("Revive / Heal")
+        Apply(SNIP_REVIVE); Notify("Revive / Heal for " .. who)
     end
 end
 
@@ -180,6 +195,19 @@ local function WriteStatus()
         hu = Pct(p.replica.hunger)
         sa = Pct(p.replica.sanity)
     end
+    -- Current players (userid~name;...) for the trainer's per-player heal/revive.
+    -- Names are sanitised so they can't break the key=val;delimited format.
+    local players = ""
+    if _G.TheNet ~= nil and _G.TheNet.GetClientTable ~= nil then
+        local ok, ct = pcall(function() return _G.TheNet:GetClientTable() end)
+        if ok and ct ~= nil then
+            for i, cl in _G.ipairs(ct) do
+                local uid = cl.userid or ""
+                local nm = (cl.name or "?"):gsub("[=;~\r\n]", " ")
+                if uid ~= "" then players = players .. uid .. "~" .. nm .. ";" end
+            end
+        end
+    end
     local s = "CoreVersion=dst-1\n"
         .. "InGame=" .. (p ~= nil and 1 or 0) .. "\n"
         .. "Admin=" .. admin .. "\n"
@@ -190,6 +218,8 @@ local function WriteStatus()
         .. "GodMode=" .. (state.god and 1 or 0) .. "\n"
         .. "FreeCraft=" .. (state.freecraft and 1 or 0) .. "\n"
         .. "Speed=" .. (state.speed and 1 or 0) .. "\n"
+        .. "Party=" .. (state.party and 1 or 0) .. "\n"
+        .. "Players=" .. players .. "\n"
     _G.TheSim:SetPersistentString(PS_STATUS, s, false, function() end)
 end
 

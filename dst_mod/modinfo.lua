@@ -13,7 +13,7 @@ When ParasTrainer is open it drives these live on the running game and shows you
 
 Requires you to be the server host / admin (you are, when hosting your own world).]]
 author = "Para"
-version = "1.4.0"
+version = "1.5.0"
 
 api_version = 10
 
