@@ -787,6 +787,8 @@ namespace ParasTrainer
                 {
                     string path = StatePath(i);
                     if (!File.Exists(path)) continue;
+                    bool haveX = false, haveY = false;
+                    int wx = 0, wy = 0;
                     foreach (string line in File.ReadAllLines(path))
                     {
                         string[] parts = line.Split('=');
@@ -794,20 +796,12 @@ namespace ParasTrainer
                         if (parts[0] == "WindowX")
                         {
                             int x;
-                            if (int.TryParse(parts[1], out x))
-                            {
-                                StartPosition = FormStartPosition.Manual;
-                                Left = x;
-                            }
+                            if (int.TryParse(parts[1], out x)) { wx = x; haveX = true; }
                         }
                         else if (parts[0] == "WindowY")
                         {
                             int y;
-                            if (int.TryParse(parts[1], out y))
-                            {
-                                StartPosition = FormStartPosition.Manual;
-                                Top = y;
-                            }
+                            if (int.TryParse(parts[1], out y)) { wy = y; haveY = true; }
                         }
                         else if (parts[0] == "SelectedGame")
                         {
@@ -815,11 +809,41 @@ namespace ParasTrainer
                             if (int.TryParse(parts[1], out g)) startGame = g;
                         }
                     }
+
+                    // Only restore the saved position if it lands on a currently
+                    // connected screen. A position saved on a monitor that's since
+                    // been disconnected (e.g. -812,-217) would otherwise strand the
+                    // window off-screen; fall back to CenterScreen in that case.
+                    if (haveX && haveY && IsPositionOnScreen(wx, wy))
+                    {
+                        StartPosition = FormStartPosition.Manual;
+                        Left = wx;
+                        Top = wy;
+                    }
                     break;
                 }
             }
             catch { }
             return startGame;
+        }
+
+        // True if a window at (x,y) with the form's size would be usably visible on
+        // some currently-connected screen (title bar reachable + a decent chunk on).
+        bool IsPositionOnScreen(int x, int y)
+        {
+            try
+            {
+                Rectangle wanted = new Rectangle(x, y, FORM_W, FORM_H);
+                foreach (Screen s in Screen.AllScreens)
+                {
+                    Rectangle inter = Rectangle.Intersect(s.WorkingArea, wanted);
+                    if (inter.Width >= 200 && inter.Height >= 80
+                        && y >= s.WorkingArea.Top - 4 && y <= s.WorkingArea.Bottom - 40)
+                        return true;
+                }
+            }
+            catch { }
+            return false;
         }
 
         // ── Panel State Persistence ──
