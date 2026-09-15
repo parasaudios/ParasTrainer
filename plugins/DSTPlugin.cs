@@ -28,7 +28,9 @@ namespace ParasTrainer
         public override Color AccentColor { get { return Color.FromArgb(206, 170, 108); } }   // aged parchment gold
         public override Color AccentDimColor { get { return Color.FromArgb(58, 46, 28); } }
         public override string IconPath { get { return @"C:\Users\Para\ParasTrainer\dst.ico"; } }
-        public override string IpcDirectory { get { return Path.Combine(Path.GetTempPath(), "dst_trainer"); } }
+        // Fixed path next to the mod. DST's Lua has no os.getenv (can't read %TEMP%),
+        // so both sides hard-agree on this folder. It's local disk and persistent.
+        public override string IpcDirectory { get { return @"J:\SteamLibrary\steamapps\common\Don't Starve Together\mods\paras_trainer\ipc"; } }
         public override string PluginVersion { get { return "2"; } }
 
         private const string MODS_DIR = @"J:\SteamLibrary\steamapps\common\Don't Starve Together\mods\paras_trainer";
@@ -47,6 +49,7 @@ namespace ParasTrainer
 
         public override void BuildPanel(Panel c)
         {
+            try { Directory.CreateDirectory(IpcDirectory); } catch { }
             int y = 10;
 
             // ── LIVE ──

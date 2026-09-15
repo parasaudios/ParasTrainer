@@ -4,27 +4,22 @@
 --   1. In-game hotkeys (F1-F7) — work standalone, no external program needed.
 --   2. Live bridge to ParasTrainer — the mod polls a command file the trainer
 --      writes and executes the commands on the running game, and writes a status
---      file back (health/hunger/sanity + toggle states). This is what lets the
---      trainer drive an ALREADY-RUNNING game, WeMod-style.
+--      file back. This is what lets the trainer drive an ALREADY-RUNNING game.
 --
 -- Everything fires the game's own built-in admin console commands, so it only
--- works when you are the server admin (hosting your own world). Verified against
--- the game's consolecommands.lua / builder.lua / mainfunctions.lua:
---   * c_godmode / c_supergodmode / c_freecrafting self-route to the server; the
---     stat setters (c_sethealth/setsanity/sethunger/setmoisture/settemperature)
---     do not, so they must run on the server — Run() handles both cases.
---   * Builder:GiveAllRecipes() toggles freebuildmode, so Free Crafting is a real
---     on/off toggle we can track by parity.
+-- works when you are the server admin (hosting your own world).
+--
+-- IPC path note: DST's Lua `os` table has NO os.getenv, so we can't read %TEMP%.
+-- Instead we use a FIXED absolute path next to the mod (local disk, persistent,
+-- easy to inspect). ParasTrainer's DSTPlugin points at the exact same folder.
 
 local _G = GLOBAL
 local io = _G.io
-local os = _G.os
 
--- ── IPC paths (shared with ParasTrainer's DSTPlugin: %TEMP%\dst_trainer) ──
-local TEMP = os and os.getenv and os.getenv("TEMP")
-local IPC = TEMP and (TEMP .. "\\dst_trainer") or nil
-local CMD_FILE = IPC and (IPC .. "\\command.txt") or nil
-local STATUS_FILE = IPC and (IPC .. "\\status.txt") or nil
+-- ── IPC paths (must match DSTPlugin.IpcDirectory in ParasTrainer) ──
+local IPC = "J:\\SteamLibrary\\steamapps\\common\\Don't Starve Together\\mods\\paras_trainer\\ipc\\"
+local CMD_FILE = IPC .. "command.txt"
+local STATUS_FILE = IPC .. "status.txt"
 
 -- Tracked toggle state (source of truth for the toggles this mod manages).
 local state = { god = false, freecraft = false, speed = false }
@@ -68,7 +63,7 @@ local function DoRevive()
     local p = _G.ThePlayer
     if p ~= nil and p.HasTag and p:HasTag("playerghost") then
         Run("c_godmode()")   -- c_godmode on a ghost => respawnfromghost
-        state.god = false    -- ghost revive doesn't leave you invincible
+        state.god = false
     else
         Run("c_sethealth(1) c_setsanity(1) c_sethunger(1)")
     end
@@ -81,7 +76,6 @@ local function Handle(token)
         return
     end
     if token == "restore" then
-        -- deterministic "make me safe now": god on + full heal + comfy
         if not state.god then Run("c_godmode()"); state.god = true end
         Run("c_sethealth(1) c_setsanity(1) c_sethunger(1) c_setmoisture(0) c_settemperature(25)")
         Notify("Full Restore (God Mode on, stats full, comfy)")
@@ -146,7 +140,6 @@ end)
 local lastSeq = nil     -- highest command seq seen; nil until first read (no replay)
 
 local function ReadCommands()
-    if not CMD_FILE then return end
     local f = io.open(CMD_FILE, "rb")
     if not f then return end
     local data = f:read("*a"); f:close()
@@ -163,7 +156,7 @@ local function ReadCommands()
             if s > maxseq then maxseq = s end
         end
     end
-    lastSeq = maxseq    -- on first read we adopt without executing (skip stale cmds)
+    lastSeq = maxseq
 end
 
 local function Pct(replica)
@@ -175,9 +168,8 @@ local function Pct(replica)
 end
 
 local function WriteStatus()
-    if not STATUS_FILE then return end
     local f = io.open(STATUS_FILE, "wb")
-    if not f then return end     -- dir not created yet (trainer not open) — skip
+    if not f then return end     -- ipc dir missing — skip (trainer recreates it)
     local p = _G.ThePlayer
     local admin = (_G.TheNet ~= nil and _G.TheNet:GetIsServerAdmin()) and 1 or 0
     local h, hu, sa = -1, -1, -1
@@ -201,8 +193,7 @@ end
 
 local statusCounter = 0
 local function Tick()
-    local ok = pcall(ReadCommands)
-    if not ok then end
+    pcall(ReadCommands)
     statusCounter = statusCounter + 1
     if statusCounter >= 3 then       -- write status ~every 0.9s (poll cmds every 0.3s)
         statusCounter = 0
@@ -210,11 +201,22 @@ local function Tick()
     end
 end
 
-AddGamePostInit(function()
-    if _G.staticScheduler ~= nil and CMD_FILE ~= nil then
-        _G.staticScheduler:ExecutePeriodic(0.3, Tick, nil, 0, "paras_trainer_ipc")
-        _G.print("[Para Trainer] IPC bridge active (0.3s) -> " .. _G.tostring(IPC))
-    end
-end)
+-- Robust startup: try immediately and from both post-init hooks; only starts once.
+local started = false
+local function StartBridge(src)
+    if started then return end
+    if _G.staticScheduler == nil then return end
+    started = true
+    _G.staticScheduler:ExecutePeriodic(0.3, Tick, nil, 0, "paras_trainer_ipc")
+    _G.print("[Para Trainer] IPC bridge active (" .. _G.tostring(src) .. ") -> " .. IPC)
+end
+
+_G.print("[Para Trainer] diag: io=" .. _G.tostring(_G.io)
+    .. " staticScheduler=" .. _G.tostring(_G.staticScheduler)
+    .. " IPC=" .. IPC)
+
+StartBridge("load")
+AddGamePostInit(function() StartBridge("gamepostinit") end)
+AddSimPostInit(function() StartBridge("simpostinit") end)
 
 _G.print("[Para Trainer] loaded — F1 Restore, F2 God, F3 FreeCraft, F4 Refill, F5 Comfort, F6 Speed, F7 Help")
