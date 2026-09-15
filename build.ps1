@@ -41,6 +41,10 @@ Write-Host "=== Building TheOneFishPlugin.dll ===" -ForegroundColor Cyan
 & $CSC /target:library /out:"$STAGE\plugins\TheOneFishPlugin.dll" /reference:"$STAGE\ParasTrainerAPI.dll" $REFS /langversion:5 /nowarn:0168,0219,0649 "$BASE\plugins\TheOneFishPlugin.cs"
 if ($LASTEXITCODE -ne 0) { Write-Host "The One Fish plugin build failed!" -ForegroundColor Red; exit 1 }
 
+Write-Host "=== Building DSTPlugin.dll ===" -ForegroundColor Cyan
+& $CSC /target:library /out:"$STAGE\plugins\DSTPlugin.dll" /reference:"$STAGE\ParasTrainerAPI.dll" $REFS /langversion:5 /nowarn:0168,0219,0649 "$BASE\plugins\DSTPlugin.cs"
+if ($LASTEXITCODE -ne 0) { Write-Host "DST plugin build failed!" -ForegroundColor Red; exit 1 }
+
 Write-Host "=== Building ParasTrainer.exe ===" -ForegroundColor Cyan
 & $CSC /target:winexe /out:"$STAGE\ParasTrainer.exe" /win32icon:$ICO /reference:"$STAGE\ParasTrainerAPI.dll" $REFS /reference:System.Linq.dll /langversion:5 /nowarn:0168,0219,0649 "$BASE\ParasTrainer.cs"
 if ($LASTEXITCODE -ne 0) { Write-Host "Shell build failed!" -ForegroundColor Red; exit 1 }
@@ -95,7 +99,8 @@ $ALL_CS = @(
     "$BASE\plugins\MecchaPlugin.cs",
     "$BASE\plugins\CatMailCoPlugin.cs",
     "$BASE\plugins\PalworldPlugin.cs",
-    "$BASE\plugins\TheOneFishPlugin.cs"
+    "$BASE\plugins\TheOneFishPlugin.cs",
+    "$BASE\plugins\DSTPlugin.cs"
 )
 
 if (-not (Test-Path "$BASE\release")) { New-Item -ItemType Directory "$BASE\release" | Out-Null }
