@@ -23,7 +23,7 @@ local PS_STATUS = "status.txt"     -- mod -> trainer (written via SetPersistentS
 
 -- Tracked toggle state (source of truth for the toggles this mod manages).
 -- `party` = apply cheats to ALL players (not just the casting admin).
-local state = { god = false, freecraft = false, speed = false, party = false }
+local state = { god = false, freecraft = false, speed = false, party = false, nospoil = false, infdura = false }
 
 -- ── Command execution ──────────────────────────────────────────────────────
 
@@ -54,18 +54,26 @@ local SNIP_GOD_ON    = [[if p.components.health then p.components.health:SetInvi
 local SNIP_GOD_OFF   = [[if p.components.health then p.components.health:SetInvincible(false) end]]
 local SNIP_REFILL    = [[if not p:HasTag("playerghost") then if p.components.health then p.components.health:SetPercent(1) end if p.components.sanity then p.components.sanity:SetPercent(1) end if p.components.hunger then p.components.hunger:SetPercent(1) end end]]
 local SNIP_COMFORT   = [[if p.components.moisture then p.components.moisture:SetPercent(0) end if p.components.temperature then p.components.temperature:SetTemperature(25) end]]
-local SNIP_FC_ON     = [[if p.components.builder and not p.components.builder.freebuildmode then p.components.builder:GiveAllRecipes() p:PushEvent("techlevelchange") end]]
-local SNIP_FC_OFF    = [[if p.components.builder and p.components.builder.freebuildmode then p.components.builder:GiveAllRecipes() p:PushEvent("techlevelchange") end]]
+-- Free Crafting: set the SERVER field directly (idempotent) — GiveAllRecipes()
+-- TOGGLES freebuildmode, which is wrong in a repeating maintenance loop. Setting
+-- the field cascades to the guest's replica netvar, enabling their crafting UI.
+local SNIP_FC_ON     = [[if p.components.builder and not p.components.builder.freebuildmode then p.components.builder.freebuildmode = true p:PushEvent("techlevelchange") end]]
+local SNIP_FC_OFF    = [[if p.components.builder and p.components.builder.freebuildmode then p.components.builder.freebuildmode = false p:PushEvent("techlevelchange") end]]
 local SNIP_SPEED_ON  = [[if p.components.locomotor then p.components.locomotor:SetExternalSpeedMultiplier(p,"paras_trainer",2) end]]
 local SNIP_SPEED_OFF = [[if p.components.locomotor then p.components.locomotor:RemoveExternalSpeedMultiplier(p,"paras_trainer") end]]
 local SNIP_RESTORE   = [[if p.components.health then p.components.health:SetInvincible(true) if not p:HasTag("playerghost") then p.components.health:SetPercent(1) end end if p.components.sanity then p.components.sanity:SetPercent(1) end if p.components.hunger then p.components.hunger:SetPercent(1) end if p.components.moisture then p.components.moisture:SetPercent(0) end if p.components.temperature then p.components.temperature:SetTemperature(25) end]]
 -- Heal a living player fully, or bring a ghost back to life.
 local SNIP_REVIVE    = [[if p:HasTag("playerghost") then p:PushEvent("respawnfromghost") else if p.components.health then p.components.health:SetPercent(1) end if p.components.sanity then p.components.sanity:SetPercent(1) end if p.components.hunger then p.components.hunger:SetPercent(1) end end]]
+-- Item maintenance (over inventory + equipped + backpack via ForEachItem).
+local SNIP_NOSPOIL_ON  = [[if p.components.inventory then p.components.inventory:ForEachItem(function(it) if it and it.components.perishable then it.components.perishable:SetLocalMultiplier(0) end end) end]]
+local SNIP_NOSPOIL_OFF = [[if p.components.inventory then p.components.inventory:ForEachItem(function(it) if it and it.components.perishable then it.components.perishable:SetLocalMultiplier(1) end end) end]]
+local SNIP_INFDURA     = [[if p.components.inventory then p.components.inventory:ForEachItem(function(it) if it then local fu=it.components.finiteuses if fu and fu.current<fu.total then fu:SetUses(fu.total) end local ar=it.components.armor if ar and not ar.indestructible and ar.condition<ar.maxcondition then ar:SetPercent(1) end local fl=it.components.fueled if fl and not fl:IsFull() then fl:SetPercent(1) end end end) end]]
 
 -- Apply a per-player snippet to the caster (solo) or all players (party-wide).
+-- The AllPlayers loop is guarded to player entities only — it never touches mobs.
 local function Apply(perPlayer)
     if state.party then
-        Run("for k,p in ipairs(AllPlayers) do " .. perPlayer .. " end")
+        Run("for k,p in ipairs(AllPlayers) do if p and p:HasTag(\"player\") then " .. perPlayer .. " end end")
     else
         Run("local p = ConsoleCommandPlayer() if p then " .. perPlayer .. " end")
     end
@@ -120,6 +128,18 @@ local function Handle(token)
         Handle(state.speed and "speed:off" or "speed:on")
     elseif token == "revive" then
         Apply(SNIP_REVIVE); Notify("Revive / Heal for " .. who)
+    elseif token == "nospoil:on" then
+        Apply(SNIP_NOSPOIL_ON); state.nospoil = true; Notify("No Spoil ON (" .. who .. ")")
+    elseif token == "nospoil:off" then
+        Apply(SNIP_NOSPOIL_OFF); state.nospoil = false; Notify("No Spoil OFF (" .. who .. ")")
+    elseif token == "nospoil:toggle" then
+        Handle(state.nospoil and "nospoil:off" or "nospoil:on")
+    elseif token == "infdura:on" then
+        Apply(SNIP_INFDURA); state.infdura = true; Notify("Infinite Durability ON (" .. who .. ")")
+    elseif token == "infdura:off" then
+        state.infdura = false; Notify("Infinite Durability OFF (" .. who .. ")")
+    elseif token == "infdura:toggle" then
+        Handle(state.infdura and "infdura:off" or "infdura:on")
     end
 end
 
@@ -219,17 +239,40 @@ local function WriteStatus()
         .. "FreeCraft=" .. (state.freecraft and 1 or 0) .. "\n"
         .. "Speed=" .. (state.speed and 1 or 0) .. "\n"
         .. "Party=" .. (state.party and 1 or 0) .. "\n"
+        .. "NoSpoil=" .. (state.nospoil and 1 or 0) .. "\n"
+        .. "InfDura=" .. (state.infdura and 1 or 0) .. "\n"
         .. "Players=" .. players .. "\n"
     _G.TheSim:SetPersistentString(PS_STATUS, s, false, function() end)
 end
 
+-- Re-assert active toggles + run item maintenance every ~2s. This keeps state
+-- sticky for players who JOIN after a cheat was enabled (party-wide re-applies
+-- to everyone present now) and keeps No Spoil / Infinite Durability covering
+-- newly acquired items. Guards avoid event spam (only act when not already set).
+local function Maintain()
+    if not CanCheat() then return end
+    local ops = ""
+    if state.god then ops = ops .. [[if p.components.health and not p.components.health.invincible then p.components.health:SetInvincible(true) end ]] end
+    if state.freecraft then ops = ops .. SNIP_FC_ON .. " " end
+    if state.speed then ops = ops .. SNIP_SPEED_ON .. " " end
+    if state.nospoil then ops = ops .. SNIP_NOSPOIL_ON .. " " end
+    if state.infdura then ops = ops .. SNIP_INFDURA .. " " end
+    if ops ~= "" then Apply(ops) end
+end
+
 local statusCounter = 0
+local maintCounter = 0
 local function Tick()
     pcall(ReadCommands)
     statusCounter = statusCounter + 1
     if statusCounter >= 3 then       -- status ~every 0.9s; commands polled every 0.3s
         statusCounter = 0
         pcall(WriteStatus)
+    end
+    maintCounter = maintCounter + 1
+    if maintCounter >= 6 then         -- maintenance ~every 1.8s
+        maintCounter = 0
+        pcall(Maintain)
     end
 end
 

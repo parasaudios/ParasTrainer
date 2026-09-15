@@ -123,13 +123,17 @@ namespace ParasTrainer
 
             // ── Toggles ──
             y = Host.SectionHeader(c, y, "CHEATS");
-            Panel tc = Host.MakeCard(c, y, 3);
+            Panel tc = Host.MakeCard(c, y, 5);
             DstToggleRow(tc, 0, "god", "God Mode (invincible)");
             Host.Divider(tc, Theme.ROW_H);
             DstToggleRow(tc, Theme.ROW_H, "freecraft", "Free Crafting");
             Host.Divider(tc, Theme.ROW_H * 2);
             DstToggleRow(tc, Theme.ROW_H * 2, "speed", "Move Speed x2");
-            y += Theme.ROW_H * 3 + Theme.PAD;
+            Host.Divider(tc, Theme.ROW_H * 3);
+            DstToggleRow(tc, Theme.ROW_H * 3, "nospoil", "No Spoil (food stays fresh)");
+            Host.Divider(tc, Theme.ROW_H * 4);
+            DstToggleRow(tc, Theme.ROW_H * 4, "infdura", "Infinite Durability (gear)");
+            y += Theme.ROW_H * 5 + Theme.PAD;
 
             // ── One-shot actions ──
             y = Host.SectionHeader(c, y, "ACTIONS");
@@ -367,6 +371,8 @@ namespace ParasTrainer
             else if (key == "GodMode") Host.SyncToggle("god", value == "1");
             else if (key == "FreeCraft") Host.SyncToggle("freecraft", value == "1");
             else if (key == "Speed") Host.SyncToggle("speed", value == "1");
+            else if (key == "NoSpoil") Host.SyncToggle("nospoil", value == "1");
+            else if (key == "InfDura") Host.SyncToggle("infdura", value == "1");
             else if (key == "Party") Host.SyncToggle("party", value == "1");
             else if (key == "Players")
             {
