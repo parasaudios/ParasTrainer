@@ -1,17 +1,19 @@
 name = "Para's Trainer"
-description = [[Admin cheat hotkeys for a self-hosted world.
+description = [[Admin cheats for a self-hosted world — in-game hotkeys AND a live link to ParasTrainer.
 
-F1  Super God Mode (invincible + infinite stats)
-F2  God Mode
-F3  Free Crafting
+F1  Full Restore (God Mode on + full stats + comfy)
+F2  God Mode (toggle)
+F3  Free Crafting (toggle)
 F4  Refill Health / Hunger / Sanity
 F5  Dry off + comfortable temperature
 F6  Move Speed x2 (toggle)
 F7  Show this hotkey list
 
+When ParasTrainer is open it drives these live on the running game and shows your stats.
+
 Requires you to be the server host / admin (you are, when hosting your own world).]]
 author = "Para"
-version = "1.1.0"
+version = "1.2.0"
 
 api_version = 10
 
