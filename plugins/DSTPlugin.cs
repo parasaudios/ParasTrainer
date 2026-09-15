@@ -28,9 +28,47 @@ namespace ParasTrainer
         public override Color AccentColor { get { return Color.FromArgb(206, 170, 108); } }   // aged parchment gold
         public override Color AccentDimColor { get { return Color.FromArgb(58, 46, 28); } }
         public override string IconPath { get { return @"C:\Users\Para\ParasTrainer\dst.ico"; } }
-        // Fixed path next to the mod. DST's Lua has no os.getenv (can't read %TEMP%),
-        // so both sides hard-agree on this folder. It's local disk and persistent.
-        public override string IpcDirectory { get { return @"J:\SteamLibrary\steamapps\common\Don't Starve Together\mods\paras_trainer\ipc"; } }
+        // DST hard-sandboxes `io` for mods, so the bridge goes through Klei's
+        // persistent-string API — files live in the client persistent root
+        // (...\Klei\DoNotStarveTogether\<account>\client_save\). We discover that
+        // folder; the mod writes status.txt there and reads command.txt from there.
+        private static string _ipcDir;
+        public override string IpcDirectory
+        {
+            get { if (_ipcDir == null) _ipcDir = DiscoverClientSave(); return _ipcDir; }
+        }
+
+        private static string DiscoverClientSave()
+        {
+            string user = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+            string[] roots = new string[] {
+                Path.Combine(user, @"OneDrive\Documents\Klei\DoNotStarveTogether"),
+                Path.Combine(user, @"Documents\Klei\DoNotStarveTogether"),
+            };
+            string best = null;
+            DateTime bestTime = DateTime.MinValue;
+            foreach (string root in roots)
+            {
+                if (!Directory.Exists(root)) continue;
+                try
+                {
+                    foreach (string acc in Directory.GetDirectories(root))
+                    {
+                        string cs = Path.Combine(acc, "client_save");
+                        if (!Directory.Exists(cs)) continue;
+                        DateTime t = Directory.GetLastWriteTime(cs);
+                        if (t > bestTime) { bestTime = t; best = cs; }
+                    }
+                }
+                catch { }
+            }
+            return best ?? Path.Combine(Path.GetTempPath(), "dst_trainer");
+        }
+
+        // Exact 11-byte Klei persistent-string header (magic + version). GetPersistentString
+        // reads a file with this prefix and returns the payload; we forge it so the mod can
+        // read our command file the same way it reads its own saves.
+        private const string KLEI_HEADER = "KLEI     1 ";
         public override string PluginVersion { get { return "2"; } }
 
         private const string MODS_DIR = @"J:\SteamLibrary\steamapps\common\Don't Starve Together\mods\paras_trainer";
@@ -121,22 +159,33 @@ namespace ParasTrainer
             return (long)(DateTime.UtcNow - new DateTime(2020, 1, 1)).TotalMilliseconds;
         }
 
+        private readonly List<string> pending = new List<string>();
+
+        private static long LineSeq(string line)
+        {
+            int bar = line.IndexOf('|');
+            long v;
+            if (bar > 0 && long.TryParse(line.Substring(0, bar), out v)) return v;
+            return 0;
+        }
+
+        // Write the whole command file each time (persistent-string files can't be
+        // appended — the KLEI header must be at the very start). We keep un-acked
+        // commands queued so nothing is lost between the mod's 0.3s polls, and drop
+        // them once the mod reports (AckSeq) that it has seen them.
         private void Dst(string token)
         {
             try
             {
-                Directory.CreateDirectory(IpcDirectory);
-                string file = Path.Combine(IpcDirectory, "command.txt");
-                // If the mod has caught up, clear the backlog so the file stays small.
-                if (ackSeq >= cmdSeq && File.Exists(file))
-                {
-                    try { File.WriteAllText(file, ""); }
-                    catch { }
-                }
                 long s = NowMs();
                 if (s <= cmdSeq) s = cmdSeq + 1;
                 cmdSeq = s;
-                File.AppendAllText(file, cmdSeq + "|" + token + "\n");
+                pending.Add(cmdSeq + "|" + token);
+                pending.RemoveAll(delegate(string line) { return LineSeq(line) <= ackSeq; });
+                string content = KLEI_HEADER + string.Join("\n", pending.ToArray());
+                Directory.CreateDirectory(IpcDirectory);
+                File.WriteAllBytes(Path.Combine(IpcDirectory, "command.txt"),
+                    System.Text.Encoding.ASCII.GetBytes(content));
             }
             catch { }
         }

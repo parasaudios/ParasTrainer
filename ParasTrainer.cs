@@ -593,6 +593,15 @@ namespace ParasTrainer
                 }
 
                 string content = File.ReadAllText(statusFile);
+                // DST writes status via Klei's persistent-string API, which prepends a
+                // "KLEI     <ver> " header. Strip it so the key=val lines parse. Only
+                // matches files starting with KLEI (DST); other games' status is untouched.
+                if (content.StartsWith("KLEI"))
+                {
+                    System.Text.RegularExpressions.Match km =
+                        System.Text.RegularExpressions.Regex.Match(content, @"^KLEI\s+\d+\s");
+                    if (km.Success) content = content.Substring(km.Length);
+                }
                 foreach (string line in content.Split('\n'))
                 {
                     string t = line.Trim();

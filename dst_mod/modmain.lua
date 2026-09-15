@@ -4,32 +4,28 @@
 --   1. In-game hotkeys (F1-F7) — work standalone, no external program needed.
 --   2. Live bridge to ParasTrainer — the mod polls a command file the trainer
 --      writes and executes the commands on the running game, and writes a status
---      file back. This is what lets the trainer drive an ALREADY-RUNNING game.
+--      file back. This lets the trainer drive an ALREADY-RUNNING game.
 --
 -- Everything fires the game's own built-in admin console commands, so it only
 -- works when you are the server admin (hosting your own world).
 --
--- IPC path note: DST's Lua `os` table has NO os.getenv, so we can't read %TEMP%.
--- Instead we use a FIXED absolute path next to the mod (local disk, persistent,
--- easy to inspect). ParasTrainer's DSTPlugin points at the exact same folder.
+-- IPC note: DST hard-sandboxes `io` for mods (io.open throws "invalid filepath"
+-- for ANY path), so the bridge uses Klei's sanctioned persistent-string API
+-- instead. Files land in the client persistent root:
+--   ...\Klei\DoNotStarveTogether\<account>\client_save\
+-- The trainer writes "command.txt" there and reads "status.txt" from there.
 
 local _G = GLOBAL
-local io = _G.io
-local pcall = _G.pcall   -- the mod-env whitelist omits pcall/tonumber/etc; reach them via _G
+local pcall = _G.pcall   -- mod-env whitelist omits pcall/tonumber/etc; reach via _G
 
--- ── IPC paths (must match DSTPlugin.IpcDirectory in ParasTrainer) ──
-local IPC = "J:\\SteamLibrary\\steamapps\\common\\Don't Starve Together\\mods\\paras_trainer\\ipc\\"
-local CMD_FILE = IPC .. "command.txt"
-local STATUS_FILE = IPC .. "status.txt"
+local PS_CMD = "command.txt"       -- trainer -> mod (read via GetPersistentString)
+local PS_STATUS = "status.txt"     -- mod -> trainer (written via SetPersistentString)
 
 -- Tracked toggle state (source of truth for the toggles this mod manages).
 local state = { god = false, freecraft = false, speed = false }
 
 -- ── Command execution ──────────────────────────────────────────────────────
 
--- Run a console command on the authoritative sim: locally if we ARE the server
--- (listen-server host), else send to the server as an admin (client + dedicated
--- server, which is the usual self-host setup).
 local function Run(cmd)
     if _G.TheWorld ~= nil and _G.TheWorld.ismastersim then
         _G.ExecuteConsoleCommand(cmd)
@@ -63,14 +59,13 @@ end
 local function DoRevive()
     local p = _G.ThePlayer
     if p ~= nil and p.HasTag and p:HasTag("playerghost") then
-        Run("c_godmode()")   -- c_godmode on a ghost => respawnfromghost
+        Run("c_godmode()")
         state.god = false
     else
         Run("c_sethealth(1) c_setsanity(1) c_sethunger(1)")
     end
 end
 
--- Semantic command vocabulary (used by both the hotkeys and the trainer bridge).
 local function Handle(token)
     if not CanCheat() then
         Notify("needs server admin — host your own world")
@@ -136,15 +131,11 @@ _G.TheInput:AddKeyDownHandler(_G.KEY_F7, function()
     end
 end)
 
--- ── Live bridge to ParasTrainer ─────────────────────────────────────────────
+-- ── Live bridge (persistent-string IPC) ─────────────────────────────────────
 
 local lastSeq = nil     -- highest command seq seen; nil until first read (no replay)
 
-local function ReadCommands()
-    local f = io.open(CMD_FILE, "rb")
-    if not f then return end
-    local data = f:read("*a"); f:close()
-    if not data then return end
+local function ProcessCommands(data)
     local first = (lastSeq == nil)
     local maxseq = lastSeq or 0
     for line in data:gmatch("[^\r\n]+") do
@@ -152,12 +143,24 @@ local function ReadCommands()
         s = _G.tonumber(s)
         if s then
             if (not first) and s > (lastSeq or 0) then
-                Handle(tok)
+                pcall(function() Handle(tok) end)
             end
             if s > maxseq then maxseq = s end
         end
     end
     lastSeq = maxseq
+end
+
+local reading = false
+local function ReadCommands()
+    if reading then return end
+    reading = true
+    _G.TheSim:GetPersistentString(PS_CMD, function(ok, data)
+        reading = false
+        if ok and data ~= nil and data ~= "" then
+            pcall(function() ProcessCommands(data) end)
+        end
+    end)
 end
 
 local function Pct(replica)
@@ -169,8 +172,6 @@ local function Pct(replica)
 end
 
 local function WriteStatus()
-    local f = io.open(STATUS_FILE, "wb")
-    if not f then return end     -- ipc dir missing — skip (trainer recreates it)
     local p = _G.ThePlayer
     local admin = (_G.TheNet ~= nil and _G.TheNet:GetIsServerAdmin()) and 1 or 0
     local h, hu, sa = -1, -1, -1
@@ -179,42 +180,37 @@ local function WriteStatus()
         hu = Pct(p.replica.hunger)
         sa = Pct(p.replica.sanity)
     end
-    f:write("CoreVersion=dst-1\n")
-    f:write("InGame=" .. (p ~= nil and 1 or 0) .. "\n")
-    f:write("Admin=" .. admin .. "\n")
-    f:write("AckSeq=" .. _G.tostring(lastSeq or 0) .. "\n")
-    f:write("Health=" .. h .. "\n")
-    f:write("Hunger=" .. hu .. "\n")
-    f:write("Sanity=" .. sa .. "\n")
-    f:write("GodMode=" .. (state.god and 1 or 0) .. "\n")
-    f:write("FreeCraft=" .. (state.freecraft and 1 or 0) .. "\n")
-    f:write("Speed=" .. (state.speed and 1 or 0) .. "\n")
-    f:close()
+    local s = "CoreVersion=dst-1\n"
+        .. "InGame=" .. (p ~= nil and 1 or 0) .. "\n"
+        .. "Admin=" .. admin .. "\n"
+        .. "AckSeq=" .. _G.tostring(lastSeq or 0) .. "\n"
+        .. "Health=" .. h .. "\n"
+        .. "Hunger=" .. hu .. "\n"
+        .. "Sanity=" .. sa .. "\n"
+        .. "GodMode=" .. (state.god and 1 or 0) .. "\n"
+        .. "FreeCraft=" .. (state.freecraft and 1 or 0) .. "\n"
+        .. "Speed=" .. (state.speed and 1 or 0) .. "\n"
+    _G.TheSim:SetPersistentString(PS_STATUS, s, false, function() end)
 end
 
 local statusCounter = 0
 local function Tick()
     pcall(ReadCommands)
     statusCounter = statusCounter + 1
-    if statusCounter >= 3 then       -- write status ~every 0.9s (poll cmds every 0.3s)
+    if statusCounter >= 3 then       -- status ~every 0.9s; commands polled every 0.3s
         statusCounter = 0
         pcall(WriteStatus)
     end
 end
 
--- Robust startup: try immediately and from both post-init hooks; only starts once.
 local started = false
 local function StartBridge(src)
     if started then return end
     if _G.staticScheduler == nil then return end
     started = true
     _G.staticScheduler:ExecutePeriodic(0.3, Tick, nil, 0, "paras_trainer_ipc")
-    _G.print("[Para Trainer] IPC bridge active (" .. _G.tostring(src) .. ") -> " .. IPC)
+    _G.print("[Para Trainer] IPC bridge active (" .. _G.tostring(src) .. ") via persistent-string")
 end
-
-_G.print("[Para Trainer] diag: io=" .. _G.tostring(_G.io)
-    .. " staticScheduler=" .. _G.tostring(_G.staticScheduler)
-    .. " IPC=" .. IPC)
 
 StartBridge("load")
 AddGamePostInit(function() StartBridge("gamepostinit") end)
