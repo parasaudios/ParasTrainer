@@ -16,7 +16,7 @@ namespace ParasTrainer
         public override Color AccentDimColor { get { return Color.FromArgb(100, 34, 34); } }
         public override string IconPath { get { return @"C:\Users\Para\RoR2Trainer\app.ico"; } }
         public override string IpcDirectory { get { return Path.Combine(Path.GetTempPath(), "ror2_trainer"); } }
-        public override string PluginVersion { get { return "71"; } }
+        public override string PluginVersion { get { return "72"; } }
 
         private TextBox itemMultInput;
         private TextBox iemDmg, iemAtkSpd, iemCrit, iemMoveSpd, iemSurv, iemOther;
@@ -483,7 +483,7 @@ namespace ParasTrainer
             targetCombo.SetBounds(80, 8, 200, 24);
             targetCombo.BackColor = Theme.BG_INPUT;
             targetCombo.ForeColor = Theme.TEXT_PRIMARY;
-            targetCombo.Items.AddRange(new object[] { "Self (Player 1)", "All Players" });
+            targetCombo.Items.Add("All Players");   // refreshed with the live roster every tick (RefreshTargetList)
             targetCombo.SelectedIndex = 0;
             gic.Controls.Add(targetCombo);
             Host.Divider(gic, Theme.ROW_H);
@@ -588,7 +588,9 @@ namespace ParasTrainer
             if (parts.Length < 2) return;
             string internalName = parts[1].Trim();
             int count = (int)itemCount.Value;
-            int playerIdx = targetCombo.SelectedIndex;
+            // Item 0 is "All Players" (core wants -1); real players follow in players.txt order (0-based).
+            int targetSel = targetCombo.SelectedIndex;
+            int playerIdx = (targetSel <= 0) ? -1 : targetSel - 1;
             string sign = remove ? "-" : "+";
             Host.SendCommand("GIVE_ITEM:" + playerIdx + ":" + internalName + ":" + sign + count);
         }
@@ -666,6 +668,12 @@ namespace ParasTrainer
 
         public override void OnTick()
         {
+            // Roster is DYNAMIC (players join/leave, swap survivors) and players.txt only fills
+            // once you're in a run — so this MUST run every tick. It used to sit AFTER the
+            // catalog early-return below; the catalog loads once early, then OnTick bailed and
+            // the target list never refreshed = "doesn't show all players".
+            RefreshTargetList();
+
             if (catalogLoaded) return;
 
             string catalogPath = Path.Combine(IpcDirectory, "item_catalog.txt");
@@ -689,27 +697,47 @@ namespace ParasTrainer
                 }
                 catch { }
             }
+        }
 
-            string playersPath = Path.Combine(IpcDirectory, "players.txt");
-            if (File.Exists(playersPath) && targetCombo != null)
+        // Rebuild the Give-Items target dropdown from players.txt: "All Players" + each player
+        // (the "idx|" prefix stripped for display), only when the roster actually changed, and
+        // preserving the current selection so a 30s poll can't yank it back.
+        private void RefreshTargetList()
+        {
+            if (targetCombo == null) return;
+            try
             {
-                try
+                List<string> desired = new List<string>();
+                desired.Add("All Players");
+                string playersPath = Path.Combine(IpcDirectory, "players.txt");
+                if (File.Exists(playersPath))
                 {
-                    string[] playerLines = File.ReadAllLines(playersPath);
-                    if (playerLines.Length > 0)
+                    foreach (string pl in File.ReadAllLines(playersPath))
                     {
-                        targetCombo.Items.Clear();
-                        foreach (string pl in playerLines)
-                        {
-                            if (pl.Trim().Length > 0)
-                                targetCombo.Items.Add(pl.Trim());
-                        }
-                        if (targetCombo.Items.Count > 0)
-                            targetCombo.SelectedIndex = 0;
+                        string line = pl.Trim();
+                        if (line.Length == 0) continue;
+                        int bar = line.IndexOf('|');
+                        desired.Add(bar >= 0 ? line.Substring(bar + 1) : line);   // strip "idx|"
                     }
                 }
-                catch { }
+
+                bool changed = desired.Count != targetCombo.Items.Count;
+                if (!changed)
+                    for (int i = 0; i < desired.Count; i++)
+                        if (!string.Equals(targetCombo.Items[i] as string, desired[i])) { changed = true; break; }
+                if (!changed) return;
+
+                string prev = targetCombo.SelectedItem as string;
+                targetCombo.BeginUpdate();
+                targetCombo.Items.Clear();
+                foreach (string d in desired) targetCombo.Items.Add(d);
+                int restore = (prev != null) ? targetCombo.Items.IndexOf(prev) : -1;
+                // keep the old pick if it's still present; else default to the first real player
+                // (the host), falling back to "All Players" when nobody is listed yet
+                targetCombo.SelectedIndex = (restore >= 0) ? restore : (targetCombo.Items.Count > 1 ? 1 : 0);
+                targetCombo.EndUpdate();
             }
+            catch { }
         }
 
         public override List<string> SaveExtraState()
