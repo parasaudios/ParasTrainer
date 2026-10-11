@@ -16,12 +16,12 @@ namespace ParasTrainer
         public override Color AccentDimColor { get { return Color.FromArgb(100, 34, 34); } }
         public override string IconPath { get { return @"C:\Users\Para\RoR2Trainer\app.ico"; } }
         public override string IpcDirectory { get { return Path.Combine(Path.GetTempPath(), "ror2_trainer"); } }
-        public override string PluginVersion { get { return "72"; } }
+        public override string PluginVersion { get { return "73"; } }
 
         private TextBox itemMultInput;
         private TextBox iemDmg, iemAtkSpd, iemCrit, iemMoveSpd, iemSurv, iemOther;
         private TextBox vacuumRange, itemVacRange, lunarInput, goldInput;
-        private ComboBox buffCombo, respawnMode, targetCombo, itemCombo, bodyCombo;
+        private ComboBox buffCombo, respawnMode, targetCombo, itemCombo, bodyCombo, hexTargetCombo;
         private TextBox itemSearch, lootRange;
         private NumericUpDown itemCount;
         private CheckBox[] espChecks;
@@ -374,11 +374,32 @@ namespace ParasTrainer
             unlockAllBtn.ForeColor = Color.FromArgb(120, 220, 150);
             unlockAllBtn.Click += delegate { Host.SendCommand("UNLOCK_ALL"); };
             Host.Divider(dlc, Theme.ROW_H);
-            Button hexBtn = Host.ActionBtn(dlc, Theme.PAD, Theme.ROW_H + 7, "Give All Hexes (host only)", Theme.CARD_W - Theme.PAD * 2);
+            // Hex give/remove target selector (host-only — inventory is server-authoritative).
+            Label hexTgtLbl = new Label();
+            hexTgtLbl.Text = "Hexes (host):";
+            hexTgtLbl.Font = new Font("Segoe UI", 9f);
+            hexTgtLbl.ForeColor = Color.FromArgb(220, 130, 245);
+            hexTgtLbl.Location = new Point(Theme.PAD, Theme.ROW_H + 12);
+            hexTgtLbl.AutoSize = true;
+            dlc.Controls.Add(hexTgtLbl);
+            hexTargetCombo = new ComboBox();
+            hexTargetCombo.DropDownStyle = ComboBoxStyle.DropDownList;
+            hexTargetCombo.SetBounds(100, Theme.ROW_H + 8, Theme.CARD_W - Theme.PAD * 2 - 100, 24);
+            hexTargetCombo.BackColor = Theme.BG_INPUT;
+            hexTargetCombo.ForeColor = Theme.TEXT_PRIMARY;
+            hexTargetCombo.Items.Add("All Players");   // refreshed with the live roster every tick
+            hexTargetCombo.SelectedIndex = 0;
+            dlc.Controls.Add(hexTargetCombo);
+            Host.Divider(dlc, Theme.ROW_H * 2);
+            Button hexBtn = Host.ActionBtn(dlc, Theme.PAD, Theme.ROW_H * 2 + 7, "Give Hexes", dHalf);
             hexBtn.BackColor = Color.FromArgb(60, 20, 70);
             hexBtn.ForeColor = Color.FromArgb(220, 130, 245);
-            hexBtn.Click += delegate { Host.SendCommand("GIVE_HEXES"); };
-            y += Theme.ROW_H * 2 + Theme.PAD;
+            hexBtn.Click += delegate { Host.SendCommand("GIVE_HEXES:" + HexTargetIdx()); };
+            Button hexRemoveBtn = Host.ActionBtn(dlc, Theme.PAD + dHalf + Theme.PAD, Theme.ROW_H * 2 + 7, "Remove Hexes", dHalf);
+            hexRemoveBtn.BackColor = Color.FromArgb(70, 20, 30);
+            hexRemoveBtn.ForeColor = Color.FromArgb(245, 140, 150);
+            hexRemoveBtn.Click += delegate { Host.SendCommand("REMOVE_HEXES:" + HexTargetIdx()); };
+            y += Theme.ROW_H * 3 + Theme.PAD;
 
             // MAP HACK (ESP — client-side overlay)
             y = Host.SectionHeader(c, y, "MAP HACK / ESP");
@@ -699,12 +720,12 @@ namespace ParasTrainer
             }
         }
 
-        // Rebuild the Give-Items target dropdown from players.txt: "All Players" + each player
-        // (the "idx|" prefix stripped for display), only when the roster actually changed, and
-        // preserving the current selection so a 30s poll can't yank it back.
+        // Rebuild the target dropdowns (Give-Items AND Hex give/remove) from players.txt:
+        // "All Players" + each player (the "idx|" prefix stripped for display), only when the
+        // roster actually changed, preserving each combo's selection so a poll can't yank it back.
         private void RefreshTargetList()
         {
-            if (targetCombo == null) return;
+            if (targetCombo == null && hexTargetCombo == null) return;
             try
             {
                 List<string> desired = new List<string>();
@@ -720,24 +741,38 @@ namespace ParasTrainer
                         desired.Add(bar >= 0 ? line.Substring(bar + 1) : line);   // strip "idx|"
                     }
                 }
-
-                bool changed = desired.Count != targetCombo.Items.Count;
-                if (!changed)
-                    for (int i = 0; i < desired.Count; i++)
-                        if (!string.Equals(targetCombo.Items[i] as string, desired[i])) { changed = true; break; }
-                if (!changed) return;
-
-                string prev = targetCombo.SelectedItem as string;
-                targetCombo.BeginUpdate();
-                targetCombo.Items.Clear();
-                foreach (string d in desired) targetCombo.Items.Add(d);
-                int restore = (prev != null) ? targetCombo.Items.IndexOf(prev) : -1;
-                // keep the old pick if it's still present; else default to the first real player
-                // (the host), falling back to "All Players" when nobody is listed yet
-                targetCombo.SelectedIndex = (restore >= 0) ? restore : (targetCombo.Items.Count > 1 ? 1 : 0);
-                targetCombo.EndUpdate();
+                SyncCombo(targetCombo, desired);
+                SyncCombo(hexTargetCombo, desired);
             }
             catch { }
+        }
+
+        // Point a combo at `desired` only if it differs, keeping the current pick when still present
+        // (else defaulting to the first real player, or "All Players" when nobody is listed yet).
+        private static void SyncCombo(ComboBox combo, List<string> desired)
+        {
+            if (combo == null) return;
+            bool changed = desired.Count != combo.Items.Count;
+            if (!changed)
+                for (int i = 0; i < desired.Count; i++)
+                    if (!string.Equals(combo.Items[i] as string, desired[i])) { changed = true; break; }
+            if (!changed) return;
+
+            string prev = combo.SelectedItem as string;
+            combo.BeginUpdate();
+            combo.Items.Clear();
+            foreach (string d in desired) combo.Items.Add(d);
+            int restore = (prev != null) ? combo.Items.IndexOf(prev) : -1;
+            combo.SelectedIndex = (restore >= 0) ? restore : (combo.Items.Count > 1 ? 1 : 0);
+            combo.EndUpdate();
+        }
+
+        // Map the hex target combo's selection to the core's playerIdx (index 0 = "All" = -1).
+        private int HexTargetIdx()
+        {
+            if (hexTargetCombo == null) return -1;
+            int s = hexTargetCombo.SelectedIndex;
+            return (s <= 0) ? -1 : s - 1;
         }
 
         public override List<string> SaveExtraState()
