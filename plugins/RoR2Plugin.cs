@@ -16,13 +16,13 @@ namespace ParasTrainer
         public override Color AccentDimColor { get { return Color.FromArgb(100, 34, 34); } }
         public override string IconPath { get { return @"C:\Users\Para\RoR2Trainer\app.ico"; } }
         public override string IpcDirectory { get { return Path.Combine(Path.GetTempPath(), "ror2_trainer"); } }
-        public override string PluginVersion { get { return "41"; } }
+        public override string PluginVersion { get { return "71"; } }
 
         private TextBox itemMultInput;
         private TextBox iemDmg, iemAtkSpd, iemCrit, iemMoveSpd, iemSurv, iemOther;
-        private TextBox vacuumRange, lunarInput, goldInput;
-        private ComboBox buffCombo, respawnMode, targetCombo, itemCombo;
-        private TextBox itemSearch;
+        private TextBox vacuumRange, itemVacRange, lunarInput, goldInput;
+        private ComboBox buffCombo, respawnMode, targetCombo, itemCombo, bodyCombo;
+        private TextBox itemSearch, lootRange;
         private NumericUpDown itemCount;
         private CheckBox[] espChecks;
         private string[] espKeys = { "ChestSmall", "ChestLarge", "Legendary", "Equipment", "Lunar", "Void",
@@ -32,6 +32,19 @@ namespace ParasTrainer
         private bool catalogLoaded;
         private bool espLoading;
         private List<string[]> items = new List<string[]>();
+
+        // Survivor bodies for the Respawn-As dropdown.
+        private string[][] bodyList = {
+            new string[]{"Commando","CommandoBody"}, new string[]{"Huntress","HuntressBody"},
+            new string[]{"MUL-T","ToolbotBody"}, new string[]{"Engineer","EngiBody"},
+            new string[]{"Artificer","MageBody"}, new string[]{"Mercenary","MercBody"},
+            new string[]{"REX","TreebotBody"}, new string[]{"Loader","LoaderBody"},
+            new string[]{"Acrid","CrocoBody"}, new string[]{"Captain","CaptainBody"},
+            new string[]{"Bandit","BanditBody"}, new string[]{"Railgunner","RailgunnerBody"},
+            new string[]{"Void Fiend","VoidSurvivorBody"}, new string[]{"Seeker","SeekerBody"},
+            new string[]{"False Son","FalseSonBody"}, new string[]{"Chef","ChefBody"},
+            new string[]{"Heretic","HereticBody"}
+        };
 
         public override void InitDefaultHotkeys(Dictionary<string, Keys> b)
         {
@@ -48,15 +61,59 @@ namespace ParasTrainer
             b["FreeScrap"] = Keys.None; b["ItemEffectMult"] = Keys.None;
             b["SaleStarPersist"] = Keys.None; b["Esp"] = Keys.None;
             b["MoneyVacuum"] = Keys.None;
+            b["VacuumItems"] = Keys.F10; b["LootNearby"] = Keys.None;
             b["InfiniteLunar"] = Keys.None;
         }
 
+        // ── Top-level: split the panel into Non-Host and Host tabs ──
         public override void BuildPanel(Panel c)
         {
-            int y = 10;
+            TabControl tabs = new TabControl();
+            tabs.Dock = DockStyle.Fill;
+            tabs.SizeMode = TabSizeMode.Fixed;
+            tabs.ItemSize = new Size(((Theme.CARD_W + Theme.PAD * 2) / 2), 30);
+            tabs.DrawMode = TabDrawMode.OwnerDrawFixed;
+            tabs.DrawItem += DrawTab;
 
-            // ── WORKS EVERYWHERE ──
-            y = Host.ColorSectionHeader(c, y, "WORKS EVERYWHERE", Theme.ACCENT_GREEN);
+            TabPage nonHostTab = new TabPage("NON-HOST"); nonHostTab.BackColor = Theme.BG_MAIN;
+            TabPage hostTab = new TabPage("HOST"); hostTab.BackColor = Theme.BG_MAIN;
+            tabs.TabPages.Add(nonHostTab);
+            tabs.TabPages.Add(hostTab);
+            c.Controls.Add(tabs);
+
+            BufferedPanel nhp = new BufferedPanel();
+            nhp.Dock = DockStyle.Fill; nhp.AutoScroll = true; nhp.BackColor = Theme.BG_MAIN;
+            nonHostTab.Controls.Add(nhp);
+            BufferedPanel hp = new BufferedPanel();
+            hp.Dock = DockStyle.Fill; hp.AutoScroll = true; hp.BackColor = Theme.BG_MAIN;
+            hostTab.Controls.Add(hp);
+
+            BuildNonHostTab(nhp);
+            BuildHostTab(hp);
+        }
+
+        private void DrawTab(object s, DrawItemEventArgs e)
+        {
+            TabControl tc = (TabControl)s;
+            bool sel = e.Index == tc.SelectedIndex;
+            Rectangle r = e.Bounds;
+            using (SolidBrush bg = new SolidBrush(sel ? Theme.BG_CARD : Theme.BG_HEADER))
+                e.Graphics.FillRectangle(bg, r);
+            if (sel)
+                using (SolidBrush acc = new SolidBrush(AccentColor))
+                    e.Graphics.FillRectangle(acc, r.Left, r.Bottom - 3, r.Width, 3);
+            TextRenderer.DrawText(e.Graphics, tc.TabPages[e.Index].Text,
+                new Font("Segoe UI", 9.5f, FontStyle.Bold), r,
+                sel ? AccentColor : Theme.TEXT_SECONDARY,
+                TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter);
+        }
+
+        // ════════════════════════════════════════════════════════════════
+        //  NON-HOST TAB — works as a client (stats, buffs, movement, respawn, ESP, IEM)
+        // ════════════════════════════════════════════════════════════════
+        private void BuildNonHostTab(Panel c)
+        {
+            int y = 10;
 
             // COMBAT
             y = Host.SectionHeader(c, y, "COMBAT");
@@ -69,7 +126,6 @@ namespace ParasTrainer
             // BUFF STACKING
             y = Host.SectionHeader(c, y, "BUFF STACKING");
             Panel bsc = Host.MakeCard(c, y, 10);
-
             Label hbLbl = new Label();
             hbLbl.Text = "  HIDDEN (invisible to spectators)";
             hbLbl.Font = new Font("Segoe UI", 8f, FontStyle.Bold);
@@ -89,7 +145,6 @@ namespace ParasTrainer
             Host.ToggleRow(bsc, Theme.ROW_H * 5, "HiddenFrost", "Frost Effect");
             Host.Divider(bsc, Theme.ROW_H * 6);
             Host.ToggleRow(bsc, Theme.ROW_H * 6, "HiddenInvuln", "Invulnerability");
-
             Host.Divider(bsc, Theme.ROW_H * 7);
             Label vbLbl = new Label();
             vbLbl.Text = "  VISIBLE (spectators can see)";
@@ -112,30 +167,77 @@ namespace ParasTrainer
             Host.ToggleRow(mc, Theme.ROW_H, "Flight", "Flight (No Gravity)");
             y += Theme.ROW_H * 2 + Theme.PAD;
 
-            // LUNAR COINS
-            y = Host.SectionHeader(c, y, "LUNAR COINS");
-            Panel lcc = Host.MakeCard(c, y, 2);
-            Host.ToggleRow(lcc, 0, "InfiniteLunar", "Infinite Lunar Coins");
-            Host.Divider(lcc, Theme.ROW_H);
-            {
-                Label ll = new Label();
-                ll.Text = "Lunar Coins:";
-                ll.Font = new Font("Segoe UI", 9f);
-                ll.ForeColor = Color.FromArgb(100, 160, 255);
-                ll.Location = new Point(Theme.PAD, Theme.ROW_H + 12);
-                ll.AutoSize = true;
-                lcc.Controls.Add(ll);
-                lunarInput = Host.MakeInput(lcc, 120, Theme.ROW_H + 8, 80, "1000");
-                Button lsBtn = Host.ActionBtn(lcc, 208, Theme.ROW_H + 7, "Set", 52);
-                lsBtn.Click += delegate {
-                    uint v; if (uint.TryParse(lunarInput.Text, out v))
-                        Host.SendCommand("SET_LUNAR:" + v);
-                };
-            }
+            // ITEM VACUUM — one-shot button + hotkey. Works as a client too: moved pickups stick
+            // locally (no position sync) and Command essences are grabbed by interacting.
+            y = Host.SectionHeader(c, y, "ITEM VACUUM");
+            Panel ivc = Host.MakeCard(c, y, 2);
+            Button ivBtn = Host.ActionBtn(ivc, Theme.PAD, 7, "Vacuum Items (sort by tier)", Theme.CARD_W - Theme.PAD * 2 - 54);
+            ivBtn.BackColor = Color.FromArgb(15, 55, 30);
+            ivBtn.ForeColor = Theme.ACCENT_GREEN;
+            ivBtn.Click += delegate { Host.SendCommand("VACUUM_ITEMS"); };
+            Host.HotkeyBtn(ivc, Theme.CARD_W - Theme.PAD - 46, 9, "VacuumItems");
+            Host.Divider(ivc, Theme.ROW_H);
+            itemVacRange = Host.ValueRow(ivc, Theme.ROW_H, "Range:", "70", "Apply", delegate {
+                int v; if (int.TryParse(itemVacRange.Text, out v))
+                { v = Math.Max(10, Math.Min(300, v)); Host.SendCommand("SET:ItemVacuumRange:" + v); }
+            });
             y += Theme.ROW_H * 2 + Theme.PAD;
 
-            // ── NON-HOST EXPLOITS ──
-            y = Host.ColorSectionHeader(c, y, "NON-HOST EXPLOITS", Theme.ACCENT_GREEN);
+            // ITEM EFFECT MULTIPLIER (client-side transpiler — works as non-host)
+            y = Host.SectionHeader(c, y, "ITEM EFFECT MULTIPLIER");
+            Panel iemc = Host.MakeCard(c, y, 8);
+            Host.ToggleRow(iemc, 0, "ItemEffectMult", "Item Effect Multiplier");
+            Host.Divider(iemc, Theme.ROW_H);
+            string[] iemLabels = { "Damage:", "Atk Speed:", "Crit:", "Move Spd:", "Survival:", "All Other:" };
+            string[] iemKeys = { "IemDamage", "IemAtkSpd", "IemCrit", "IemMoveSpd", "IemSurvival", "IemOther" };
+            TextBox[] iemInputs = new TextBox[6];
+            for (int i = 0; i < 6; i++)
+            {
+                int row = i + 1;
+                Label il = new Label();
+                il.Text = iemLabels[i];
+                il.Font = new Font("Segoe UI", 9f);
+                il.ForeColor = Theme.TEXT_SECONDARY;
+                il.Location = new Point(Theme.PAD + 18, Theme.ROW_H * row + 12);
+                il.AutoSize = true;
+                iemc.Controls.Add(il);
+                iemInputs[i] = Host.MakeInput(iemc, 130, Theme.ROW_H * row + 8, 60, "1");
+                TextBox iemTb = iemInputs[i];
+                string iemKey = iemKeys[i];
+                iemTb.TextChanged += delegate { Host.DirtyInputs.Add(iemTb); };   // don't let the poll clobber edits
+                // Auto-apply as soon as the user finishes editing (focus lost) or presses Enter —
+                // no separate "Set All" click required.
+                System.EventHandler iemApply = delegate {
+                    int v; if (int.TryParse(iemTb.Text, out v))
+                    {
+                        v = Math.Max(1, Math.Min(100, v));
+                        if (v.ToString() != iemTb.Text) iemTb.Text = v.ToString();
+                        Host.SendCommand("SET:" + iemKey + ":" + v);
+                        Host.AppliedAt[iemTb] = DateTime.Now;
+                    }
+                };
+                iemTb.Leave += iemApply;
+                iemTb.KeyDown += delegate(object s2, KeyEventArgs e2) {
+                    if (e2.KeyCode == Keys.Enter) { e2.SuppressKeyPress = true; iemApply(s2, EventArgs.Empty); }
+                };
+                if (i < 5) Host.Divider(iemc, Theme.ROW_H * (row + 1));
+            }
+            iemDmg = iemInputs[0]; iemAtkSpd = iemInputs[1]; iemCrit = iemInputs[2];
+            iemMoveSpd = iemInputs[3]; iemSurv = iemInputs[4]; iemOther = iemInputs[5];
+            Host.Divider(iemc, Theme.ROW_H * 7);
+            Button setAllBtn = Host.ActionBtn(iemc, Theme.PAD, Theme.ROW_H * 7 + 7, "Set All", Theme.CARD_W - Theme.PAD * 2);
+            setAllBtn.BackColor = Color.FromArgb(15, 55, 30);
+            setAllBtn.ForeColor = Theme.ACCENT_GREEN;
+            setAllBtn.Click += delegate {
+                string[] keys = { "IemDamage", "IemAtkSpd", "IemCrit", "IemMoveSpd", "IemSurvival", "IemOther" };
+                TextBox[] tbs = { iemDmg, iemAtkSpd, iemCrit, iemMoveSpd, iemSurv, iemOther };
+                for (int i = 0; i < 6; i++)
+                {
+                    int v; if (int.TryParse(tbs[i].Text, out v))
+                    { v = Math.Max(1, Math.Min(100, v)); Host.SendCommand("SET:" + keys[i] + ":" + v); Host.AppliedAt[tbs[i]] = DateTime.Now; }
+                }
+            };
+            y += Theme.ROW_H * 8 + Theme.PAD;
 
             // APPLY BUFF
             y = Host.SectionHeader(c, y, "APPLY BUFF");
@@ -174,8 +276,147 @@ namespace ParasTrainer
             }
             y += Theme.ROW_H + Theme.PAD;
 
-            // ── HOST ONLY ──
-            y = Host.ColorSectionHeader(c, y, "HOST ONLY", Theme.ACCENT_AMBER);
+            // RESPAWN & TELEPORTER (respawn works as non-host via ForceRespawn)
+            y = Host.SectionHeader(c, y, "RESPAWN & TELEPORTER");
+            Panel rc = Host.MakeCard(c, y, 5);
+            Button revBtn = Host.ActionBtn(rc, Theme.PAD, 7, "Revive / Respawn (One-Shot)", Theme.CARD_W - Theme.PAD * 2);
+            revBtn.BackColor = Color.FromArgb(20, 60, 80);
+            revBtn.ForeColor = Color.FromArgb(100, 200, 255);
+            revBtn.Click += delegate { Host.SendCommand("RESPAWN"); };
+            Host.Divider(rc, Theme.ROW_H);
+
+            Label raLbl = new Label();
+            raLbl.Text = "Respawn as:";
+            raLbl.Font = new Font("Segoe UI", 9f);
+            raLbl.ForeColor = Theme.TEXT_SECONDARY;
+            raLbl.Location = new Point(Theme.PAD, Theme.ROW_H + 12);
+            raLbl.AutoSize = true;
+            rc.Controls.Add(raLbl);
+            bodyCombo = new ComboBox();
+            bodyCombo.DropDownStyle = ComboBoxStyle.DropDownList;
+            bodyCombo.SetBounds(100, Theme.ROW_H + 8, 180, 24);
+            bodyCombo.BackColor = Theme.BG_INPUT;
+            bodyCombo.ForeColor = Theme.TEXT_PRIMARY;
+            foreach (string[] bd in bodyList) bodyCombo.Items.Add(bd[0]);
+            bodyCombo.SelectedIndex = 0;
+            rc.Controls.Add(bodyCombo);
+            Button raBtn = Host.ActionBtn(rc, 288, Theme.ROW_H + 7, "Go", Theme.CARD_W - 288 - Theme.PAD);
+            raBtn.BackColor = Color.FromArgb(20, 60, 80);
+            raBtn.ForeColor = Color.FromArgb(100, 200, 255);
+            raBtn.Click += delegate {
+                if (bodyCombo.SelectedIndex >= 0)
+                    Host.SendCommand("RESPAWN_AS:" + bodyList[bodyCombo.SelectedIndex][1]);
+            };
+            Host.Divider(rc, Theme.ROW_H * 2);
+
+            int halfW = (Theme.CARD_W - Theme.PAD * 3) / 2;
+            Button ftpBtn = Host.ActionBtn(rc, Theme.PAD, Theme.ROW_H * 2 + 7, "Force Teleporter", halfW);
+            ftpBtn.BackColor = Color.FromArgb(20, 60, 80);
+            ftpBtn.ForeColor = Color.FromArgb(100, 200, 255);
+            ftpBtn.Click += delegate { Host.SendCommand("FORCE_TP"); };
+            Button usBtn = Host.ActionBtn(rc, Theme.PAD + halfW + Theme.PAD, Theme.ROW_H * 2 + 7, "Unstuck", halfW);
+            usBtn.BackColor = Color.FromArgb(80, 60, 10);
+            usBtn.ForeColor = Color.FromArgb(255, 200, 60);
+            usBtn.Click += delegate { Host.SendCommand("UNSTUCK"); };
+            Host.Divider(rc, Theme.ROW_H * 3);
+
+            // Loot Nearby (remote interact — works as non-host)
+            Label lnLbl = new Label();
+            lnLbl.Text = "Loot range:";
+            lnLbl.Font = new Font("Segoe UI", 9f);
+            lnLbl.ForeColor = Theme.ACCENT_GREEN;
+            lnLbl.Location = new Point(Theme.PAD, Theme.ROW_H * 3 + 12);
+            lnLbl.AutoSize = true;
+            rc.Controls.Add(lnLbl);
+            lootRange = Host.MakeInput(rc, 100, Theme.ROW_H * 3 + 8, 56, "80");
+            Button lnBtn = Host.ActionBtn(rc, 164, Theme.ROW_H * 3 + 7, "Loot Nearby (open chests/barrels)", Theme.CARD_W - 164 - Theme.PAD - 54);
+            lnBtn.BackColor = Color.FromArgb(15, 55, 30);
+            lnBtn.ForeColor = Theme.ACCENT_GREEN;
+            lnBtn.Click += delegate {
+                string r = lootRange.Text.Trim(); if (r.Length == 0) r = "80";
+                Host.SendCommand("LOOT_NEARBY:" + r);
+            };
+            Host.HotkeyBtn(rc, Theme.CARD_W - Theme.PAD - 46, Theme.ROW_H * 3 + 9, "LootNearby");
+            y += Theme.ROW_H * 5 + Theme.PAD;
+
+            // LUNAR COINS
+            y = Host.SectionHeader(c, y, "LUNAR COINS");
+            Panel lcc = Host.MakeCard(c, y, 2);
+            Host.ToggleRow(lcc, 0, "InfiniteLunar", "Infinite Lunar Coins");
+            Host.Divider(lcc, Theme.ROW_H);
+            {
+                Label ll = new Label();
+                ll.Text = "Lunar Coins:";
+                ll.Font = new Font("Segoe UI", 9f);
+                ll.ForeColor = Color.FromArgb(100, 160, 255);
+                ll.Location = new Point(Theme.PAD, Theme.ROW_H + 12);
+                ll.AutoSize = true;
+                lcc.Controls.Add(ll);
+                lunarInput = Host.MakeInput(lcc, 120, Theme.ROW_H + 8, 80, "1000");
+                Button lsBtn = Host.ActionBtn(lcc, 208, Theme.ROW_H + 7, "Set", 52);
+                lsBtn.Click += delegate {
+                    uint v; if (uint.TryParse(lunarInput.Text, out v))
+                        Host.SendCommand("SET_LUNAR:" + v);
+                };
+            }
+            y += Theme.ROW_H * 2 + Theme.PAD;
+
+            // DLC UNLOCKS (profile-side — work as non-host)
+            y = Host.SectionHeader(c, y, "HALLOWED CONCEPTS (DLC)");
+            Panel dlc = Host.MakeCard(c, y, 2);
+            int dHalf = (Theme.CARD_W - Theme.PAD * 3) / 2;
+            Button acolyteBtn = Host.ActionBtn(dlc, Theme.PAD, 7, "Unlock Acolyte", dHalf);
+            acolyteBtn.BackColor = Color.FromArgb(40, 30, 70);
+            acolyteBtn.ForeColor = Color.FromArgb(160, 140, 240);
+            acolyteBtn.Click += delegate { Host.SendCommand("UNLOCK_ACOLYTE"); };
+            Button unlockAllBtn = Host.ActionBtn(dlc, Theme.PAD + dHalf + Theme.PAD, 7, "Unlock All", dHalf);
+            unlockAllBtn.BackColor = Color.FromArgb(30, 55, 40);
+            unlockAllBtn.ForeColor = Color.FromArgb(120, 220, 150);
+            unlockAllBtn.Click += delegate { Host.SendCommand("UNLOCK_ALL"); };
+            Host.Divider(dlc, Theme.ROW_H);
+            Button hexBtn = Host.ActionBtn(dlc, Theme.PAD, Theme.ROW_H + 7, "Give All Hexes (host only)", Theme.CARD_W - Theme.PAD * 2);
+            hexBtn.BackColor = Color.FromArgb(60, 20, 70);
+            hexBtn.ForeColor = Color.FromArgb(220, 130, 245);
+            hexBtn.Click += delegate { Host.SendCommand("GIVE_HEXES"); };
+            y += Theme.ROW_H * 2 + Theme.PAD;
+
+            // MAP HACK (ESP — client-side overlay)
+            y = Host.SectionHeader(c, y, "MAP HACK / ESP");
+            int espCheckRows = 7;
+            Panel espc = Host.MakeCard(c, y, espCheckRows);
+            Host.ToggleRow(espc, 0, "Esp", "ESP Overlay", true);
+            Host.Divider(espc, Theme.ROW_H);
+            espChecks = new CheckBox[12];
+            for (int i = 0; i < 12; i++)
+            {
+                int col = i % 2;
+                int row = i / 2;
+                CheckBox cb = new CheckBox();
+                cb.Text = espLabels[i];
+                cb.Font = new Font("Segoe UI", 8.5f);
+                cb.ForeColor = Theme.TEXT_PRIMARY;
+                cb.BackColor = Theme.BG_CARD;
+                cb.Checked = true;
+                cb.SetBounds(Theme.PAD + col * 230, Theme.ROW_H + 8 + row * 28, 210, 22);
+                int ci = i;
+                cb.CheckedChanged += delegate {
+                    if (!espLoading)
+                        Host.SendCommand("ESP_CAT:" + espKeys[ci] + ":" + (cb.Checked ? "1" : "0"));
+                };
+                espc.Controls.Add(cb);
+                espChecks[i] = cb;
+            }
+            y += Theme.ROW_H * espCheckRows + Theme.PAD;
+
+            Host.AddSpacer(c, y, 20);
+        }
+
+        // ════════════════════════════════════════════════════════════════
+        //  HOST TAB — needs to be hosting (server-authoritative: money, items, vacuum…)
+        // ════════════════════════════════════════════════════════════════
+        private void BuildHostTab(Panel c)
+        {
+            int y = 10;
 
             // HOST TOGGLES
             y = Host.SectionHeader(c, y, "HOST TOGGLES");
@@ -206,50 +447,19 @@ namespace ParasTrainer
             Host.ToggleRow(ibc, Theme.ROW_H * 3, "FreeScrap", "Free Scrap on Pickup");
             y += Theme.ROW_H * 4 + Theme.PAD;
 
-            // ITEM EFFECT MULTIPLIER
-            y = Host.SectionHeader(c, y, "ITEM EFFECT MULTIPLIER");
-            Panel iemc = Host.MakeCard(c, y, 8);
-            Host.ToggleRow(iemc, 0, "ItemEffectMult", "Item Effect Multiplier");
-            Host.Divider(iemc, Theme.ROW_H);
+            // MONEY VACUUM
+            y = Host.SectionHeader(c, y, "MONEY VACUUM");
+            Panel mvc = Host.MakeCard(c, y, 2);
+            Host.ToggleRow(mvc, 0, "MoneyVacuum", "Money Vacuum");
+            Host.Divider(mvc, Theme.ROW_H);
+            vacuumRange = Host.ValueRow(mvc, Theme.ROW_H, "Range:", "50", "Apply", delegate {
+                int v; if (int.TryParse(vacuumRange.Text, out v))
+                { v = Math.Max(10, Math.Min(200, v)); Host.SendCommand("SET:VacuumRange:" + v); }
+            });
+            y += Theme.ROW_H * 2 + Theme.PAD;
 
-            string[] iemLabels = { "Damage:", "Atk Speed:", "Crit:", "Move Spd:", "Survival:", "All Other:" };
-            TextBox[] iemInputs = new TextBox[6];
-            for (int i = 0; i < 6; i++)
-            {
-                int row = i + 1;
-                Label il = new Label();
-                il.Text = iemLabels[i];
-                il.Font = new Font("Segoe UI", 9f);
-                il.ForeColor = Theme.TEXT_SECONDARY;
-                il.Location = new Point(Theme.PAD + 18, Theme.ROW_H * row + 12);
-                il.AutoSize = true;
-                iemc.Controls.Add(il);
-                iemInputs[i] = Host.MakeInput(iemc, 130, Theme.ROW_H * row + 8, 60, "1");
-                if (i < 5) Host.Divider(iemc, Theme.ROW_H * (row + 1));
-            }
-            iemDmg = iemInputs[0]; iemAtkSpd = iemInputs[1]; iemCrit = iemInputs[2];
-            iemMoveSpd = iemInputs[3]; iemSurv = iemInputs[4]; iemOther = iemInputs[5];
-
-            Host.Divider(iemc, Theme.ROW_H * 7);
-            Button setAllBtn = Host.ActionBtn(iemc, Theme.PAD, Theme.ROW_H * 7 + 7, "Set All", Theme.CARD_W - Theme.PAD * 2);
-            setAllBtn.BackColor = Color.FromArgb(40, 30, 10);
-            setAllBtn.ForeColor = Theme.ACCENT_AMBER;
-            setAllBtn.Click += delegate {
-                string[] keys = { "IemDamage", "IemAtkSpd", "IemCrit", "IemMoveSpd", "IemSurvival", "IemOther" };
-                TextBox[] tbs = { iemDmg, iemAtkSpd, iemCrit, iemMoveSpd, iemSurv, iemOther };
-                for (int i = 0; i < 6; i++)
-                {
-                    int v; if (int.TryParse(tbs[i].Text, out v))
-                    {
-                        v = Math.Max(1, Math.Min(100, v));
-                        Host.SendCommand("SET:" + keys[i] + ":" + v);
-                    }
-                }
-            };
-            y += Theme.ROW_H * 8 + Theme.PAD;
-
-            // ── ACTIONS (HOST ONLY) ──
-            y = Host.ColorSectionHeader(c, y, "ACTIONS (HOST ONLY)", Theme.ACCENT_AMBER);
+            // ACTIONS
+            y = Host.SectionHeader(c, y, "ACTIONS");
             Panel kac = Host.MakeCard(c, y, 1);
             Button kaBtn = Host.ActionBtn(kac, Theme.PAD, 7, "Kill All Enemies", Theme.CARD_W - Theme.PAD * 2 - 54);
             kaBtn.BackColor = Color.FromArgb(80, 20, 20);
@@ -258,114 +468,8 @@ namespace ParasTrainer
             Host.HotkeyBtn(kac, Theme.CARD_W - Theme.PAD - 46, 9, "KillAll");
             y += Theme.ROW_H + Theme.PAD;
 
-            // ── RESPAWN & TELEPORTER ──
-            y = Host.ColorSectionHeader(c, y, "RESPAWN & TELEPORTER", Color.FromArgb(100, 200, 255));
-
-            Panel rc = Host.MakeCard(c, y, 4);
-            Button revBtn = Host.ActionBtn(rc, Theme.PAD, 7, "Revive (One-Shot)", Theme.CARD_W - Theme.PAD * 2);
-            revBtn.BackColor = Color.FromArgb(20, 60, 80);
-            revBtn.ForeColor = Color.FromArgb(100, 200, 255);
-            revBtn.Click += delegate { Host.SendCommand("RESPAWN"); };
-            Host.Divider(rc, Theme.ROW_H);
-
-            int halfW = (Theme.CARD_W - Theme.PAD * 3) / 2;
-            Button rspBtn = Host.ActionBtn(rc, Theme.PAD, Theme.ROW_H + 7, "Respawn", halfW);
-            rspBtn.BackColor = Color.FromArgb(20, 60, 80);
-            rspBtn.ForeColor = Color.FromArgb(100, 200, 255);
-            rspBtn.Click += delegate { Host.SendCommand("RESPAWN"); };
-            Button ftpBtn = Host.ActionBtn(rc, Theme.PAD + halfW + Theme.PAD, Theme.ROW_H + 7, "Force Teleporter", halfW);
-            ftpBtn.BackColor = Color.FromArgb(20, 60, 80);
-            ftpBtn.ForeColor = Color.FromArgb(100, 200, 255);
-            ftpBtn.Click += delegate { Host.SendCommand("FORCE_TP"); };
-            Host.Divider(rc, Theme.ROW_H * 2);
-
-            Label rmLbl = new Label();
-            rmLbl.Text = "Mode:";
-            rmLbl.Font = new Font("Segoe UI", 9f);
-            rmLbl.ForeColor = Theme.TEXT_SECONDARY;
-            rmLbl.Location = new Point(Theme.PAD, Theme.ROW_H * 2 + 12);
-            rmLbl.AutoSize = true;
-            rc.Controls.Add(rmLbl);
-            respawnMode = new ComboBox();
-            respawnMode.DropDownStyle = ComboBoxStyle.DropDownList;
-            respawnMode.SetBounds(70, Theme.ROW_H * 2 + 8, 90, 24);
-            respawnMode.BackColor = Theme.BG_INPUT;
-            respawnMode.ForeColor = Theme.TEXT_PRIMARY;
-            respawnMode.Items.AddRange(new object[] { "Instant", "Pod" });
-            respawnMode.SelectedIndex = 0;
-            respawnMode.SelectedIndexChanged += delegate {
-                Host.SendCommand(respawnMode.SelectedIndex == 0 ? "RESPAWN_MODE_INSTANT" : "RESPAWN_MODE_POD");
-            };
-            rc.Controls.Add(respawnMode);
-
-            Button atpBtn = Host.ActionBtn(rc, 180, Theme.ROW_H * 2 + 7, "Activate TP (Console)", Theme.CARD_W - 180 - Theme.PAD);
-            atpBtn.BackColor = Color.FromArgb(20, 50, 60);
-            atpBtn.ForeColor = Color.FromArgb(80, 180, 220);
-            atpBtn.Click += delegate { Host.SendCommand("CCMD:activate_teleporter"); };
-            Host.Divider(rc, Theme.ROW_H * 3);
-
-            Button usBtn = Host.ActionBtn(rc, Theme.PAD, Theme.ROW_H * 3 + 7, "Unstuck (Reset & Respawn)", Theme.CARD_W - Theme.PAD * 2);
-            usBtn.BackColor = Color.FromArgb(80, 60, 10);
-            usBtn.ForeColor = Color.FromArgb(255, 200, 60);
-            usBtn.Click += delegate { Host.SendCommand("UNSTUCK"); };
-            y += Theme.ROW_H * 4 + Theme.PAD;
-
-            // ── SERVER CONSOLE (cheats required) ──
-            y = Host.ColorSectionHeader(c, y, "SERVER CONSOLE (cheats required)", Color.FromArgb(80, 180, 220));
-
-            Panel ccc = Host.MakeCard(c, y, 4);
-            Button ecBtn = Host.ActionBtn(ccc, Theme.PAD, 7, "Try Enable Cheats", Theme.CARD_W - Theme.PAD * 2);
-            ecBtn.BackColor = Color.FromArgb(60, 30, 10);
-            ecBtn.ForeColor = Theme.ACCENT_AMBER;
-            ecBtn.Click += delegate { Host.SendCommand("ENABLE_CHEATS"); };
-            Host.Divider(ccc, Theme.ROW_H);
-
-            Label ggLbl = new Label();
-            ggLbl.Text = "Give Gold:";
-            ggLbl.Font = new Font("Segoe UI", 9f);
-            ggLbl.ForeColor = Color.FromArgb(80, 180, 220);
-            ggLbl.Location = new Point(Theme.PAD, Theme.ROW_H + 12);
-            ggLbl.AutoSize = true;
-            ccc.Controls.Add(ggLbl);
-            goldInput = Host.MakeInput(ccc, 100, Theme.ROW_H + 8, 80, "10000");
-            Button ggBtn = Host.ActionBtn(ccc, 188, Theme.ROW_H + 7, "Give", 52);
-            ggBtn.Click += delegate { Host.SendCommand("CCMD:team_give_money:1:" + goldInput.Text); };
-            Host.Divider(ccc, Theme.ROW_H * 2);
-
-            int consHalfW = (Theme.CARD_W - Theme.PAD * 3) / 2;
-            Button ckBtn = Host.ActionBtn(ccc, Theme.PAD, Theme.ROW_H * 2 + 7, "Kill All (Console)", consHalfW);
-            ckBtn.BackColor = Color.FromArgb(60, 20, 20);
-            ckBtn.ForeColor = Color.FromArgb(220, 100, 100);
-            ckBtn.Click += delegate { Host.SendCommand("CCMD:kill_all"); };
-            Button slBtn = Host.ActionBtn(ccc, Theme.PAD + consHalfW + Theme.PAD, Theme.ROW_H * 2 + 7, "Set Level 99", consHalfW);
-            slBtn.BackColor = Color.FromArgb(20, 50, 60);
-            slBtn.ForeColor = Color.FromArgb(80, 180, 220);
-            slBtn.Click += delegate { Host.SendCommand("CCMD:team_set_level:1:99"); };
-            Host.Divider(ccc, Theme.ROW_H * 3);
-
-            Label giLbl = new Label();
-            giLbl.Text = "Give Item:";
-            giLbl.Font = new Font("Segoe UI", 9f);
-            giLbl.ForeColor = Color.FromArgb(80, 180, 220);
-            giLbl.Location = new Point(Theme.PAD, Theme.ROW_H * 3 + 12);
-            giLbl.AutoSize = true;
-            ccc.Controls.Add(giLbl);
-            Button giBtn = Host.ActionBtn(ccc, 100, Theme.ROW_H * 3 + 7, "Give x1", 80);
-            giBtn.BackColor = Color.FromArgb(20, 50, 60);
-            giBtn.ForeColor = Color.FromArgb(80, 180, 220);
-            giBtn.Click += delegate {
-                if (itemCombo != null && itemCombo.SelectedItem != null)
-                {
-                    string[] parts = itemCombo.SelectedItem.ToString().Split('|');
-                    if (parts.Length >= 2)
-                        Host.SendCommand("CCMD:give_item:" + parts[1].Trim() + ":1");
-                }
-            };
-            y += Theme.ROW_H * 4 + Theme.PAD;
-
-            // ── GIVE ITEMS (HOST ONLY) ──
-            y = Host.ColorSectionHeader(c, y, "GIVE ITEMS (HOST ONLY)", Theme.ACCENT_AMBER);
-
+            // GIVE ITEMS
+            y = Host.SectionHeader(c, y, "GIVE ITEMS");
             Panel gic = Host.MakeCard(c, y, 5);
             Label tgtLbl = new Label();
             tgtLbl.Text = "Target:";
@@ -438,49 +542,23 @@ namespace ParasTrainer
             rmBtn.Click += delegate { GiveItem(true); };
             y += Theme.ROW_H * 5 + Theme.PAD;
 
-            // ── MAP HACK ──
-            y = Host.ColorSectionHeader(c, y, "MAP HACK", Theme.ACCENT_GREEN);
-
-            int espCheckRows = 7;
-            Panel espc = Host.MakeCard(c, y, espCheckRows);
-            Host.ToggleRow(espc, 0, "Esp", "ESP Overlay", true);
-            Host.Divider(espc, Theme.ROW_H);
-
-            espChecks = new CheckBox[12];
-            for (int i = 0; i < 12; i++)
-            {
-                int col = i % 2;
-                int row = i / 2;
-                CheckBox cb = new CheckBox();
-                cb.Text = espLabels[i];
-                cb.Font = new Font("Segoe UI", 8.5f);
-                cb.ForeColor = Theme.TEXT_PRIMARY;
-                cb.BackColor = Theme.BG_CARD;
-                cb.Checked = true;
-                cb.SetBounds(Theme.PAD + col * 230, Theme.ROW_H + 8 + row * 28, 210, 22);
-                int ci = i;
-                cb.CheckedChanged += delegate {
-                    if (!espLoading)
-                        Host.SendCommand("ESP_CAT:" + espKeys[ci] + ":" + (cb.Checked ? "1" : "0"));
-                };
-                espc.Controls.Add(cb);
-                espChecks[i] = cb;
-            }
-            y += Theme.ROW_H * espCheckRows + Theme.PAD;
-
-            // ── MONEY VACUUM (HOST ONLY) ──
-            y = Host.ColorSectionHeader(c, y, "MONEY VACUUM (HOST ONLY)", Theme.ACCENT_AMBER);
-
-            Panel mvc = Host.MakeCard(c, y, 2);
-            Host.ToggleRow(mvc, 0, "MoneyVacuum", "Money Vacuum");
-            Host.Divider(mvc, Theme.ROW_H);
-            vacuumRange = Host.ValueRow(mvc, Theme.ROW_H, "Range:", "50", "Apply", delegate {
-                int v; if (int.TryParse(vacuumRange.Text, out v))
-                {
-                    v = Math.Max(10, Math.Min(200, v));
-                    Host.SendCommand("SET:VacuumRange:" + v);
-                }
-            });
+            // SERVER CONSOLE (most of these need the host to have enable_cheats)
+            y = Host.SectionHeader(c, y, "SERVER CONSOLE (cheats required)");
+            Panel ccc = Host.MakeCard(c, y, 2);
+            int consHalfW = (Theme.CARD_W - Theme.PAD * 3) / 2;
+            Button slBtn = Host.ActionBtn(ccc, Theme.PAD, 7, "Set Level 99", consHalfW);
+            slBtn.BackColor = Color.FromArgb(20, 50, 60);
+            slBtn.ForeColor = Color.FromArgb(80, 180, 220);
+            slBtn.Click += delegate { Host.SendCommand("CCMD:team_set_level:1:99"); };
+            Button atpBtn = Host.ActionBtn(ccc, Theme.PAD + consHalfW + Theme.PAD, 7, "Activate Teleporter", consHalfW);
+            atpBtn.BackColor = Color.FromArgb(20, 50, 60);
+            atpBtn.ForeColor = Color.FromArgb(80, 180, 220);
+            atpBtn.Click += delegate { Host.SendCommand("CCMD:activate_teleporter"); };
+            Host.Divider(ccc, Theme.ROW_H);
+            Button ecBtn = Host.ActionBtn(ccc, Theme.PAD, Theme.ROW_H + 7, "Try Enable Cheats", Theme.CARD_W - Theme.PAD * 2);
+            ecBtn.BackColor = Color.FromArgb(60, 30, 10);
+            ecBtn.ForeColor = Theme.ACCENT_AMBER;
+            ecBtn.Click += delegate { Host.SendCommand("ENABLE_CHEATS"); };
             y += Theme.ROW_H * 2 + Theme.PAD;
 
             Host.AddSpacer(c, y, 20);
@@ -525,31 +603,35 @@ namespace ParasTrainer
             }
             else if (key == "IemDamage" && iemDmg != null)
             {
-                if (int.TryParse(value, out i)) iemDmg.Text = i.ToString();
+                if (int.TryParse(value, out i)) Host.SyncInput(iemDmg, i.ToString());
             }
             else if (key == "IemAtkSpd" && iemAtkSpd != null)
             {
-                if (int.TryParse(value, out i)) iemAtkSpd.Text = i.ToString();
+                if (int.TryParse(value, out i)) Host.SyncInput(iemAtkSpd, i.ToString());
             }
             else if (key == "IemCrit" && iemCrit != null)
             {
-                if (int.TryParse(value, out i)) iemCrit.Text = i.ToString();
+                if (int.TryParse(value, out i)) Host.SyncInput(iemCrit, i.ToString());
             }
             else if (key == "IemMoveSpd" && iemMoveSpd != null)
             {
-                if (int.TryParse(value, out i)) iemMoveSpd.Text = i.ToString();
+                if (int.TryParse(value, out i)) Host.SyncInput(iemMoveSpd, i.ToString());
             }
             else if (key == "IemSurvival" && iemSurv != null)
             {
-                if (int.TryParse(value, out i)) iemSurv.Text = i.ToString();
+                if (int.TryParse(value, out i)) Host.SyncInput(iemSurv, i.ToString());
             }
             else if (key == "IemOther" && iemOther != null)
             {
-                if (int.TryParse(value, out i)) iemOther.Text = i.ToString();
+                if (int.TryParse(value, out i)) Host.SyncInput(iemOther, i.ToString());
             }
             else if (key == "VacuumRange" && vacuumRange != null)
             {
                 if (float.TryParse(value, out f)) Host.SyncInput(vacuumRange, f.ToString("F0"));
+            }
+            else if (key == "ItemVacuumRange" && itemVacRange != null)
+            {
+                if (float.TryParse(value, out f)) Host.SyncInput(itemVacRange, f.ToString("F0"));
             }
             else if (key == "EspCats" && espChecks != null)
             {
@@ -576,14 +658,10 @@ namespace ParasTrainer
 
         public override void ExecuteHotkey(string action)
         {
-            if (action == "KillAll")
-            {
-                Host.SendCommand("KILL_ALL");
-            }
-            else
-            {
-                Host.SendCommand("TOGGLE:" + action);
-            }
+            if (action == "KillAll") Host.SendCommand("KILL_ALL");
+            else if (action == "VacuumItems") Host.SendCommand("VACUUM_ITEMS");
+            else if (action == "LootNearby") Host.SendCommand("LOOT_NEARBY:" + ((lootRange != null && lootRange.Text.Trim().Length > 0) ? lootRange.Text.Trim() : "80"));
+            else Host.SendCommand("TOGGLE:" + action);
         }
 
         public override void OnTick()
@@ -639,7 +717,7 @@ namespace ParasTrainer
             List<string> lines = new List<string>();
             if (itemMultInput != null) lines.Add("Val_ItemMult=" + itemMultInput.Text);
             if (vacuumRange != null) lines.Add("Val_Vacuum=" + vacuumRange.Text);
-            if (respawnMode != null) lines.Add("RespawnMode=" + (respawnMode.SelectedIndex == 0 ? "Instant" : "Pod"));
+            if (itemVacRange != null) lines.Add("Val_ItemVac=" + itemVacRange.Text);
             if (espChecks != null)
             {
                 for (int j = 0; j < espChecks.Length; j++)
@@ -653,8 +731,7 @@ namespace ParasTrainer
             string v;
             if (data.TryGetValue("Val_ItemMult", out v) && itemMultInput != null) itemMultInput.Text = v;
             if (data.TryGetValue("Val_Vacuum", out v) && vacuumRange != null) vacuumRange.Text = v;
-            if (data.TryGetValue("RespawnMode", out v) && respawnMode != null)
-                respawnMode.SelectedIndex = v == "Pod" ? 1 : 0;
+            if (data.TryGetValue("Val_ItemVac", out v) && itemVacRange != null) itemVacRange.Text = v;
             if (espChecks != null)
             {
                 espLoading = true;
