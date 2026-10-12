@@ -9,27 +9,28 @@ namespace ParasTrainer
 {
     public static class Theme
     {
-        public static readonly Color BG_SIDEBAR = Color.FromArgb(8, 8, 20);
-        public static readonly Color BG_SIDEBAR_CARD = Color.FromArgb(18, 18, 36);
-        public static readonly Color BG_SIDEBAR_HOVER = Color.FromArgb(24, 24, 46);
-        public static readonly Color BG_SIDEBAR_SEL = Color.FromArgb(30, 30, 55);
-        public static readonly Color BG_MAIN = Color.FromArgb(11, 11, 25);
-        public static readonly Color BG_HEADER = Color.FromArgb(14, 14, 32);
-        public static readonly Color BG_CARD = Color.FromArgb(22, 22, 42);
-        public static readonly Color BG_INPUT = Color.FromArgb(30, 30, 52);
-        public static readonly Color BG_BTN_HOVER = Color.FromArgb(38, 38, 62);
-        public static readonly Color TEXT_PRIMARY = Color.FromArgb(232, 232, 242);
-        public static readonly Color TEXT_SECONDARY = Color.FromArgb(130, 130, 160);
-        public static readonly Color TEXT_DISABLED = Color.FromArgb(70, 70, 95);
-        public static readonly Color BORDER = Color.FromArgb(36, 36, 58);
-        public static readonly Color BORDER_CARD = Color.FromArgb(42, 42, 68);
-        public static readonly Color STATUS_RED = Color.FromArgb(220, 60, 60);
-        public static readonly Color ACCENT_AMBER = Color.FromArgb(245, 158, 11);
-        public static readonly Color ACCENT_GREEN = Color.FromArgb(74, 222, 128);
-        public static readonly Color HK_BG = Color.FromArgb(30, 30, 52);
-        public static readonly Color HK_BORDER = Color.FromArgb(52, 52, 78);
-        public static readonly Color HK_TEXT = Color.FromArgb(105, 105, 135);
-        public static readonly Color HK_EDIT_BG = Color.FromArgb(100, 30, 30);
+        // Neutral charcoal palette with elevated card surfaces (modern dark UI, WAND-style).
+        public static readonly Color BG_SIDEBAR = Color.FromArgb(18, 19, 24);
+        public static readonly Color BG_SIDEBAR_CARD = Color.FromArgb(30, 32, 39);
+        public static readonly Color BG_SIDEBAR_HOVER = Color.FromArgb(39, 42, 51);
+        public static readonly Color BG_SIDEBAR_SEL = Color.FromArgb(45, 49, 60);
+        public static readonly Color BG_MAIN = Color.FromArgb(22, 23, 28);
+        public static readonly Color BG_HEADER = Color.FromArgb(26, 28, 34);
+        public static readonly Color BG_CARD = Color.FromArgb(32, 35, 43);
+        public static readonly Color BG_INPUT = Color.FromArgb(42, 45, 54);
+        public static readonly Color BG_BTN_HOVER = Color.FromArgb(52, 56, 67);
+        public static readonly Color TEXT_PRIMARY = Color.FromArgb(235, 237, 241);
+        public static readonly Color TEXT_SECONDARY = Color.FromArgb(154, 161, 173);
+        public static readonly Color TEXT_DISABLED = Color.FromArgb(98, 105, 117);
+        public static readonly Color BORDER = Color.FromArgb(44, 47, 57);
+        public static readonly Color BORDER_CARD = Color.FromArgb(52, 56, 67);
+        public static readonly Color STATUS_RED = Color.FromArgb(235, 92, 92);
+        public static readonly Color ACCENT_AMBER = Color.FromArgb(245, 173, 70);
+        public static readonly Color ACCENT_GREEN = Color.FromArgb(52, 211, 153);
+        public static readonly Color HK_BG = Color.FromArgb(38, 41, 50);
+        public static readonly Color HK_BORDER = Color.FromArgb(56, 60, 71);
+        public static readonly Color HK_TEXT = Color.FromArgb(140, 147, 159);
+        public static readonly Color HK_EDIT_BG = Color.FromArgb(120, 48, 48);
 
         public const int ROW_H = 42;
         public const int PAD = 14;
@@ -125,7 +126,7 @@ namespace ParasTrainer
         {
             Graphics g = e.Graphics;
             g.SmoothingMode = SmoothingMode.AntiAlias;
-            Color offColor = _hovered ? Color.FromArgb(58, 58, 85) : Color.FromArgb(42, 42, 66);
+            Color offColor = _hovered ? Color.FromArgb(64, 68, 80) : Color.FromArgb(50, 54, 64);
             Color track = LerpColor(offColor, _accentColor, _colorBlend);
             using (SolidBrush b = new SolidBrush(track))
                 g.FillPath(b, Theme.RoundRect(0, 0, Width - 1, Height - 1, Height / 2));
@@ -228,14 +229,20 @@ namespace ParasTrainer
 
         public int SectionHeader(Panel parent, int y, string text)
         {
+            // accent bar + brighter label gives each group a clear visual anchor
+            Panel bar = new Panel();
+            bar.SetBounds(Theme.PAD, y + 2, 3, 12);
+            bar.BackColor = AccentColor;
+            parent.Controls.Add(bar);
+
             Label lbl = new Label();
             lbl.Text = text;
-            lbl.Font = new Font("Segoe UI", 8f, FontStyle.Bold);
+            lbl.Font = new Font("Segoe UI", 8.5f, FontStyle.Bold);
             lbl.ForeColor = Theme.TEXT_SECONDARY;
-            lbl.Location = new Point(Theme.PAD + 2, y);
+            lbl.Location = new Point(Theme.PAD + 11, y);
             lbl.AutoSize = true;
             parent.Controls.Add(lbl);
-            return y + 20;
+            return y + 22;
         }
 
         public Panel MakeCard(Panel parent, int y, int rowCount)

@@ -12,8 +12,8 @@ namespace ParasTrainer
         public override string ShortName { get { return "ROR2"; } }
         public override string SteamId { get { return "632360"; } }
         public override string ProcessName { get { return "Risk of Rain 2"; } }
-        public override Color AccentColor { get { return Color.FromArgb(220, 60, 60); } }
-        public override Color AccentDimColor { get { return Color.FromArgb(100, 34, 34); } }
+        public override Color AccentColor { get { return Color.FromArgb(45, 212, 191); } }
+        public override Color AccentDimColor { get { return Color.FromArgb(19, 78, 74); } }
         public override string IconPath { get { return @"C:\Users\Para\RoR2Trainer\app.ico"; } }
         public override string IpcDirectory { get { return Path.Combine(Path.GetTempPath(), "ror2_trainer"); } }
         public override string PluginVersion { get { return "74"; } }
