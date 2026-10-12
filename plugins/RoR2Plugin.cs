@@ -16,13 +16,13 @@ namespace ParasTrainer
         public override Color AccentDimColor { get { return Color.FromArgb(100, 34, 34); } }
         public override string IconPath { get { return @"C:\Users\Para\RoR2Trainer\app.ico"; } }
         public override string IpcDirectory { get { return Path.Combine(Path.GetTempPath(), "ror2_trainer"); } }
-        public override string PluginVersion { get { return "73"; } }
+        public override string PluginVersion { get { return "74"; } }
 
         private TextBox itemMultInput;
         private TextBox iemDmg, iemAtkSpd, iemCrit, iemMoveSpd, iemSurv, iemOther;
         private TextBox vacuumRange, itemVacRange, lunarInput, goldInput;
-        private ComboBox buffCombo, respawnMode, targetCombo, itemCombo, bodyCombo, hexTargetCombo;
-        private TextBox itemSearch, lootRange;
+        private ComboBox buffCombo, respawnMode, targetCombo, itemCombo, bodyCombo, hexTargetCombo, tierTargetCombo;
+        private TextBox itemSearch, lootRange, tierW, tierG, tierR;
         private NumericUpDown itemCount;
         private CheckBox[] espChecks;
         private string[] espKeys = { "ChestSmall", "ChestLarge", "Legendary", "Equipment", "Lunar", "Void",
@@ -563,6 +563,55 @@ namespace ParasTrainer
             rmBtn.Click += delegate { GiveItem(true); };
             y += Theme.ROW_H * 5 + Theme.PAD;
 
+            // TIER DROP BIAS (host) — per-player White/Green/Red chest drop weights.
+            // Re-rolls a chest's item for the chosen player when they open it.
+            y = Host.SectionHeader(c, y, "TIER DROP BIAS (host)");
+            Panel tbc = Host.MakeCard(c, y, 3);
+            Label tbTgt = new Label();
+            tbTgt.Text = "Target:";
+            tbTgt.Font = new Font("Segoe UI", 9f);
+            tbTgt.ForeColor = Theme.TEXT_SECONDARY;
+            tbTgt.Location = new Point(Theme.PAD, 12);
+            tbTgt.AutoSize = true;
+            tbc.Controls.Add(tbTgt);
+            tierTargetCombo = new ComboBox();
+            tierTargetCombo.DropDownStyle = ComboBoxStyle.DropDownList;
+            tierTargetCombo.SetBounds(80, 8, 200, 24);
+            tierTargetCombo.BackColor = Theme.BG_INPUT;
+            tierTargetCombo.ForeColor = Theme.TEXT_PRIMARY;
+            tierTargetCombo.Items.Add("All Players");   // refreshed with the live roster every tick
+            tierTargetCombo.SelectedIndex = 0;
+            tbc.Controls.Add(tierTargetCombo);
+            Host.Divider(tbc, Theme.ROW_H);
+
+            // White / Green / Red relative weights on one row (0 = never, higher = more likely)
+            int wy = Theme.ROW_H + 8;
+            Label wl = new Label(); wl.Text = "W:"; wl.Font = new Font("Segoe UI", 9f, FontStyle.Bold);
+            wl.ForeColor = Color.FromArgb(215, 215, 215); wl.Location = new Point(Theme.PAD, wy + 4); wl.AutoSize = true; tbc.Controls.Add(wl);
+            tierW = Host.MakeInput(tbc, Theme.PAD + 26, wy, 70, "80");
+            Label gl = new Label(); gl.Text = "G:"; gl.Font = new Font("Segoe UI", 9f, FontStyle.Bold);
+            gl.ForeColor = Color.FromArgb(90, 210, 110); gl.Location = new Point(Theme.PAD + 112, wy + 4); gl.AutoSize = true; tbc.Controls.Add(gl);
+            tierG = Host.MakeInput(tbc, Theme.PAD + 138, wy, 70, "15");
+            Label rl = new Label(); rl.Text = "R:"; rl.Font = new Font("Segoe UI", 9f, FontStyle.Bold);
+            rl.ForeColor = Color.FromArgb(235, 95, 95); rl.Location = new Point(Theme.PAD + 224, wy + 4); rl.AutoSize = true; tbc.Controls.Add(rl);
+            tierR = Host.MakeInput(tbc, Theme.PAD + 250, wy, 70, "5");
+            Host.Divider(tbc, Theme.ROW_H * 2);
+
+            int tbHalf = (Theme.CARD_W - Theme.PAD * 3) / 2;
+            Button tbApply = Host.ActionBtn(tbc, Theme.PAD, Theme.ROW_H * 2 + 7, "Apply Bias", tbHalf);
+            tbApply.BackColor = Color.FromArgb(20, 55, 70);
+            tbApply.ForeColor = Color.FromArgb(120, 200, 245);
+            tbApply.Click += delegate {
+                int w, g, r;
+                if (int.TryParse(tierW.Text, out w) && int.TryParse(tierG.Text, out g) && int.TryParse(tierR.Text, out r))
+                    Host.SendCommand("SET_TIER_BIAS:" + TierTargetIdx() + ":" + w + ":" + g + ":" + r);
+            };
+            Button tbClear = Host.ActionBtn(tbc, Theme.PAD + tbHalf + Theme.PAD, Theme.ROW_H * 2 + 7, "Clear", tbHalf);
+            tbClear.BackColor = Color.FromArgb(60, 40, 20);
+            tbClear.ForeColor = Color.FromArgb(230, 180, 110);
+            tbClear.Click += delegate { Host.SendCommand("CLEAR_TIER_BIAS:" + TierTargetIdx()); };
+            y += Theme.ROW_H * 3 + Theme.PAD;
+
             // SERVER CONSOLE (most of these need the host to have enable_cheats)
             y = Host.SectionHeader(c, y, "SERVER CONSOLE (cheats required)");
             Panel ccc = Host.MakeCard(c, y, 2);
@@ -725,7 +774,7 @@ namespace ParasTrainer
         // roster actually changed, preserving each combo's selection so a poll can't yank it back.
         private void RefreshTargetList()
         {
-            if (targetCombo == null && hexTargetCombo == null) return;
+            if (targetCombo == null && hexTargetCombo == null && tierTargetCombo == null) return;
             try
             {
                 List<string> desired = new List<string>();
@@ -743,6 +792,7 @@ namespace ParasTrainer
                 }
                 SyncCombo(targetCombo, desired);
                 SyncCombo(hexTargetCombo, desired);
+                SyncCombo(tierTargetCombo, desired);
             }
             catch { }
         }
@@ -772,6 +822,14 @@ namespace ParasTrainer
         {
             if (hexTargetCombo == null) return -1;
             int s = hexTargetCombo.SelectedIndex;
+            return (s <= 0) ? -1 : s - 1;
+        }
+
+        // Map the tier-bias target combo's selection to the core's playerIdx (index 0 = "All" = -1).
+        private int TierTargetIdx()
+        {
+            if (tierTargetCombo == null) return -1;
+            int s = tierTargetCombo.SelectedIndex;
             return (s <= 0) ? -1 : s - 1;
         }
 
