@@ -56,6 +56,7 @@ namespace ParasTrainer
         Button hdrPlayBtn;
 
         Panel contentHost;
+        Panel footerPanel;
         Panel[] contentPanels;
         bool[] panelBuilt;
 
@@ -80,6 +81,14 @@ namespace ParasTrainer
             BuildHeader();
             BuildFooter();
             BuildContentHost();
+            // WinForms docks back-to-front: the BACKMOST docked control is placed first.
+            // Want: sidebar (Left, full height) first, then header (Top) + footer (Bottom) in the
+            // remaining right area, then content (Fill) last. So order back->front:
+            // sidebar, header, footer, content.
+            sidebarPanel.SendToBack();
+            headerPanel.BringToFront();
+            footerPanel.BringToFront();
+            contentHost.BringToFront();
 
             int startGame = RestoreFormState();
             if (startGame < 0 || startGame >= plugins.Length) startGame = 0;
@@ -194,8 +203,9 @@ namespace ParasTrainer
         {
             Text = "Paras Trainer";
             Size = new Size(FORM_W, FORM_H);
-            FormBorderStyle = FormBorderStyle.FixedSingle;
-            MaximizeBox = false;
+            FormBorderStyle = FormBorderStyle.Sizable;
+            MaximizeBox = true;
+            MinimumSize = new Size(600, 540);
             StartPosition = FormStartPosition.CenterScreen;
             BackColor = Theme.BG_MAIN;
             DoubleBuffered = true;
@@ -206,6 +216,8 @@ namespace ParasTrainer
         {
             sidebarPanel = new Panel();
             sidebarPanel.SetBounds(0, 0, SIDEBAR_W, FORM_H);
+            sidebarPanel.Dock = DockStyle.Left;
+            sidebarPanel.Width = SIDEBAR_W;
             sidebarPanel.BackColor = Theme.BG_SIDEBAR;
             Controls.Add(sidebarPanel);
 
@@ -300,6 +312,7 @@ namespace ParasTrainer
             updateBtn.FlatAppearance.BorderColor = Theme.BORDER_CARD;
             updateBtn.FlatAppearance.MouseOverBackColor = Theme.BG_SIDEBAR_HOVER;
             updateBtn.SetBounds(10, FORM_H - 120, SIDEBAR_W - 20, 30);
+            updateBtn.Anchor = AnchorStyles.Bottom | AnchorStyles.Left;
             updateBtn.Text = "Check for Updates";
             updateBtn.Font = new Font("Segoe UI", 8.5f);
             updateBtn.BackColor = Theme.BG_SIDEBAR_CARD;
@@ -314,6 +327,7 @@ namespace ParasTrainer
             updateStatus.ForeColor = Theme.TEXT_DISABLED;
             updateStatus.Location = new Point(10, FORM_H - 86);
             updateStatus.Size = new Size(SIDEBAR_W - 20, 16);
+            updateStatus.Anchor = AnchorStyles.Bottom | AnchorStyles.Left;
             updateStatus.TextAlign = ContentAlignment.MiddleCenter;
             sidebarPanel.Controls.Add(updateStatus);
         }
@@ -322,6 +336,8 @@ namespace ParasTrainer
         {
             headerPanel = new Panel();
             headerPanel.SetBounds(SIDEBAR_W, 0, FORM_W - SIDEBAR_W, HEADER_H);
+            headerPanel.Dock = DockStyle.Top;
+            headerPanel.Height = HEADER_H;
             headerPanel.BackColor = Theme.BG_HEADER;
             Controls.Add(headerPanel);
 
@@ -381,8 +397,11 @@ namespace ParasTrainer
 
         void BuildFooter()
         {
-            Panel fp = new Panel();
-            fp.SetBounds(SIDEBAR_W, FORM_H - FOOTER_H - 39, FORM_W - SIDEBAR_W, FOOTER_H);
+            footerPanel = new Panel();
+            Panel fp = footerPanel;
+            fp.SetBounds(SIDEBAR_W, FORM_H - FOOTER_H, FORM_W - SIDEBAR_W, FOOTER_H);
+            fp.Dock = DockStyle.Bottom;
+            fp.Height = FOOTER_H;
             fp.BackColor = Theme.BG_HEADER;
             Controls.Add(fp);
 
@@ -398,6 +417,7 @@ namespace ParasTrainer
             reloadLabel.Font = new Font("Segoe UI", 8f, FontStyle.Bold);
             reloadLabel.ForeColor = Theme.ACCENT_AMBER;
             reloadLabel.Location = new Point(FORM_W - SIDEBAR_W - 180, 10);
+            reloadLabel.Anchor = AnchorStyles.Top | AnchorStyles.Right;
             reloadLabel.AutoSize = true;
             reloadLabel.Text = "";
             reloadLabel.Cursor = Cursors.Hand;
@@ -408,7 +428,8 @@ namespace ParasTrainer
         void BuildContentHost()
         {
             contentHost = new Panel();
-            contentHost.SetBounds(SIDEBAR_W, HEADER_H, FORM_W - SIDEBAR_W, FORM_H - HEADER_H - FOOTER_H - 39);
+            contentHost.SetBounds(SIDEBAR_W, HEADER_H, FORM_W - SIDEBAR_W, FORM_H - HEADER_H - FOOTER_H);
+            contentHost.Dock = DockStyle.Fill;
             contentHost.BackColor = Theme.BG_MAIN;
             Controls.Add(contentHost);
         }
@@ -430,6 +451,7 @@ namespace ParasTrainer
             {
                 Panel cp = new BufferedPanel();
                 cp.SetBounds(0, 0, contentHost.Width, contentHost.Height);
+                cp.Dock = DockStyle.Fill;
                 cp.AutoScroll = true;
                 cp.BackColor = Theme.BG_MAIN;
                 contentHost.Controls.Add(cp);
