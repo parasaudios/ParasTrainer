@@ -19,6 +19,7 @@ namespace ParasTrainer
         public static readonly Color BG_CARD = Color.FromArgb(32, 35, 43);
         public static readonly Color BG_INPUT = Color.FromArgb(42, 45, 54);
         public static readonly Color BG_BTN_HOVER = Color.FromArgb(52, 56, 67);
+        public static readonly Color BG_ROW_HOVER = Color.FromArgb(40, 44, 53);
         public static readonly Color TEXT_PRIMARY = Color.FromArgb(235, 237, 241);
         public static readonly Color TEXT_SECONDARY = Color.FromArgb(154, 161, 173);
         public static readonly Color TEXT_DISABLED = Color.FromArgb(98, 105, 117);
@@ -231,18 +232,18 @@ namespace ParasTrainer
         {
             // accent bar + brighter label gives each group a clear visual anchor
             Panel bar = new Panel();
-            bar.SetBounds(Theme.PAD, y + 2, 3, 12);
+            bar.SetBounds(Theme.PAD, y + 3, 3, 14);
             bar.BackColor = AccentColor;
             parent.Controls.Add(bar);
 
             Label lbl = new Label();
             lbl.Text = text;
-            lbl.Font = new Font("Segoe UI", 8.5f, FontStyle.Bold);
-            lbl.ForeColor = Theme.TEXT_SECONDARY;
-            lbl.Location = new Point(Theme.PAD + 11, y);
+            lbl.Font = new Font("Segoe UI", 9.5f, FontStyle.Bold);
+            lbl.ForeColor = Theme.TEXT_PRIMARY;
+            lbl.Location = new Point(Theme.PAD + 12, y);
             lbl.AutoSize = true;
             parent.Controls.Add(lbl);
-            return y + 22;
+            return y + 24;
         }
 
         public Panel MakeCard(Panel parent, int y, int rowCount)
@@ -251,15 +252,10 @@ namespace ParasTrainer
             Panel card = new BufferedPanel();
             card.SetBounds(Theme.PAD, y, Theme.CARD_W, h);
             card.BackColor = Theme.BG_CARD;
-            card.Paint += delegate(object s, PaintEventArgs e) {
-                e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
-                using (Pen p = new Pen(Theme.BORDER_CARD))
-                {
-                    GraphicsPath path = Theme.RoundRect(0, 0, card.Width - 1, card.Height - 1, 6);
-                    e.Graphics.DrawPath(p, path);
-                    path.Dispose();
-                }
-            };
+            // Flat elevated surface with soft rounded corners (clip to a rounded region so the
+            // child rows can fill edge-to-edge without covering a drawn border).
+            try { using (GraphicsPath gp = Theme.RoundRect(0, 0, Theme.CARD_W, h, 9)) card.Region = new Region(gp); }
+            catch { }
             parent.Controls.Add(card);
             return card;
         }
@@ -279,19 +275,32 @@ namespace ParasTrainer
 
         public void ToggleRow(Panel card, int rowY, string feature, string label, bool defaultOn)
         {
+            // Each row is its own panel so it can highlight on hover (WeMod/WAND feel) and carry
+            // a hairline bottom divider.
+            BufferedPanel row = new BufferedPanel();
+            row.SetBounds(0, rowY, card.Width, Theme.ROW_H);
+            row.BackColor = Theme.BG_CARD;
+            row.Paint += delegate(object s, PaintEventArgs e) {
+                using (Pen p = new Pen(Theme.BORDER))
+                    e.Graphics.DrawLine(p, Theme.PAD, row.Height - 1, row.Width - Theme.PAD, row.Height - 1);
+            };
+            card.Controls.Add(row);
+
             Label lbl = new Label();
             lbl.Text = label;
-            lbl.Font = new Font("Segoe UI", 9.5f);
+            lbl.Font = new Font("Segoe UI", 10f);
             lbl.ForeColor = defaultOn ? AccentColor : Theme.TEXT_PRIMARY;
-            lbl.Location = new Point(Theme.PAD, rowY + 10);
             lbl.AutoSize = true;
-            card.Controls.Add(lbl);
+            lbl.BackColor = Color.Transparent;
+            lbl.Location = new Point(Theme.PAD, (Theme.ROW_H - 19) / 2);
+            row.Controls.Add(lbl);
 
+            int hkW = 46, swW = 44, gap = 12;
             ToggleSwitch sw = new ToggleSwitch();
             sw.AccentColor = AccentColor;
             sw.Checked = defaultOn;
-            sw.Location = new Point(Theme.CARD_W - Theme.PAD - 44 - 54, rowY + 9);
-            card.Controls.Add(sw);
+            sw.Location = new Point(row.Width - Theme.PAD - hkW - gap - swW, (Theme.ROW_H - 24) / 2);
+            row.Controls.Add(sw);
 
             if (!FeatureStates.ContainsKey(feature))
                 FeatureStates[feature] = defaultOn;
@@ -305,7 +314,18 @@ namespace ParasTrainer
                 host.SendCommand("TOGGLE:" + feature);
             };
 
-            HotkeyBtn(card, Theme.CARD_W - Theme.PAD - 46, rowY + 9, feature);
+            HotkeyBtn(row, row.Width - Theme.PAD - hkW, (Theme.ROW_H - 24) / 2, feature);
+
+            Button hk = HotkeyButtons.ContainsKey(feature) ? HotkeyButtons[feature] : null;
+            EventHandler onEnter = delegate { row.BackColor = Theme.BG_ROW_HOVER; };
+            EventHandler onLeave = delegate {
+                if (!row.ClientRectangle.Contains(row.PointToClient(Cursor.Position)))
+                    row.BackColor = Theme.BG_CARD;
+            };
+            row.MouseEnter += onEnter; row.MouseLeave += onLeave;
+            lbl.MouseEnter += onEnter; lbl.MouseLeave += onLeave;
+            sw.MouseEnter += onEnter; sw.MouseLeave += onLeave;
+            if (hk != null) { hk.MouseEnter += onEnter; hk.MouseLeave += onLeave; }
         }
 
         public TextBox ValueRow(Panel card, int rowY, string label, string defVal, string btnText, EventHandler onClick)
@@ -363,10 +383,11 @@ namespace ParasTrainer
         {
             Button btn = new Button();
             btn.FlatStyle = FlatStyle.Flat;
-            btn.FlatAppearance.BorderColor = Theme.HK_BORDER;
+            btn.FlatAppearance.BorderSize = 0;
             btn.FlatAppearance.MouseOverBackColor = Theme.BG_BTN_HOVER;
             btn.SetBounds(x, y, 46, 24);
-            btn.Font = new Font("Segoe UI", 7.5f);
+            try { using (GraphicsPath gp = Theme.RoundRect(0, 0, 46, 24, 6)) btn.Region = new Region(gp); } catch { }
+            btn.Font = new Font("Segoe UI", 7.5f, FontStyle.Bold);
             btn.BackColor = Theme.HK_BG;
             btn.ForeColor = Theme.HK_TEXT;
             btn.Cursor = Cursors.Hand;
