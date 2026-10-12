@@ -33,7 +33,7 @@ namespace ParasTrainer
         public static readonly Color HK_TEXT = Color.FromArgb(140, 147, 159);
         public static readonly Color HK_EDIT_BG = Color.FromArgb(120, 48, 48);
 
-        public const int ROW_H = 42;
+        public const int ROW_H = 46;
         public const int PAD = 14;
         public const int CARD_W = 488;
 

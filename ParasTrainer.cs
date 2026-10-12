@@ -334,44 +334,50 @@ namespace ParasTrainer
 
         void BuildHeader()
         {
-            headerPanel = new Panel();
+            headerPanel = new BufferedPanel();
             headerPanel.SetBounds(SIDEBAR_W, 0, FORM_W - SIDEBAR_W, HEADER_H);
             headerPanel.Dock = DockStyle.Top;
             headerPanel.Height = HEADER_H;
             headerPanel.BackColor = Theme.BG_HEADER;
+            headerPanel.Paint += PaintHeader;
             Controls.Add(headerPanel);
 
             hdrTitle = new Label();
-            hdrTitle.Font = new Font("Segoe UI", 16f, FontStyle.Bold);
+            hdrTitle.Font = new Font("Segoe UI", 15f, FontStyle.Bold);
             hdrTitle.ForeColor = Theme.TEXT_PRIMARY;
-            hdrTitle.Location = new Point(20, 14);
+            hdrTitle.BackColor = Color.Transparent;
+            hdrTitle.Location = new Point(90, 28);
             hdrTitle.AutoSize = true;
             headerPanel.Controls.Add(hdrTitle);
 
             hdrSubtitle = new Label();
             hdrSubtitle.Font = new Font("Segoe UI", 8.5f);
             hdrSubtitle.ForeColor = Theme.TEXT_SECONDARY;
-            hdrSubtitle.Location = new Point(22, 42);
+            hdrSubtitle.BackColor = Color.Transparent;
+            hdrSubtitle.Location = new Point(92, 56);
             hdrSubtitle.AutoSize = true;
             headerPanel.Controls.Add(hdrSubtitle);
 
             hdrVersion = new Label();
             hdrVersion.Font = new Font("Segoe UI", 8f);
             hdrVersion.ForeColor = Theme.TEXT_DISABLED;
+            hdrVersion.BackColor = Color.Transparent;
             hdrVersion.AutoSize = true;
             headerPanel.Controls.Add(hdrVersion);
 
             hdrPlayBtn = new Button();
             hdrPlayBtn.FlatStyle = FlatStyle.Flat;
             hdrPlayBtn.FlatAppearance.BorderSize = 0;
-            hdrPlayBtn.SetBounds(170, 62, 200, 40);
-            hdrPlayBtn.Font = new Font("Segoe UI", 11f, FontStyle.Bold);
+            hdrPlayBtn.SetBounds(FORM_W - SIDEBAR_W - 156, 42, 132, 36);
+            hdrPlayBtn.Anchor = AnchorStyles.Top | AnchorStyles.Right;
+            try { using (GraphicsPath gp = Theme.RoundRect(0, 0, 132, 36, 8)) hdrPlayBtn.Region = new Region(gp); } catch { }
+            hdrPlayBtn.Font = new Font("Segoe UI", 9.5f, FontStyle.Bold);
             hdrPlayBtn.Cursor = Cursors.Hand;
             hdrPlayBtn.Click += PlayClick;
             headerPanel.Controls.Add(hdrPlayBtn);
 
             hdrStatusDot = new Panel();
-            hdrStatusDot.SetBounds(22, 74, 10, 10);
+            hdrStatusDot.SetBounds(92, 91, 10, 10);
             hdrStatusDot.BackColor = Theme.STATUS_RED;
             hdrStatusDot.Paint += delegate(object s, PaintEventArgs e) {
                 e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
@@ -383,16 +389,59 @@ namespace ParasTrainer
             hdrStatusLabel = new Label();
             hdrStatusLabel.Font = new Font("Segoe UI", 9f, FontStyle.Bold);
             hdrStatusLabel.ForeColor = Theme.TEXT_SECONDARY;
-            hdrStatusLabel.Location = new Point(36, 72);
+            hdrStatusLabel.BackColor = Color.Transparent;
+            hdrStatusLabel.Location = new Point(108, 89);
             hdrStatusLabel.AutoSize = true;
             headerPanel.Controls.Add(hdrStatusLabel);
 
             hdrStatusDetail = new Label();
             hdrStatusDetail.Font = new Font("Segoe UI", 8f);
             hdrStatusDetail.ForeColor = Theme.TEXT_DISABLED;
-            hdrStatusDetail.Location = new Point(22, 96);
+            hdrStatusDetail.BackColor = Color.Transparent;
+            hdrStatusDetail.Location = new Point(108, 106);
             hdrStatusDetail.AutoSize = true;
             headerPanel.Controls.Add(hdrStatusDetail);
+        }
+
+        Color curAccent = Theme.ACCENT_GREEN;
+
+        static Color BlendToward(Color a, Color b, float t)
+        {
+            return Color.FromArgb(
+                (int)(a.R + (b.R - a.R) * t),
+                (int)(a.G + (b.G - a.G) * t),
+                (int)(a.B + (b.B - a.B) * t));
+        }
+
+        void PaintHeader(object s, PaintEventArgs e)
+        {
+            Rectangle rect = headerPanel.ClientRectangle;
+            if (rect.Width <= 1 || rect.Height <= 1) return;
+            Graphics g = e.Graphics;
+            g.SmoothingMode = SmoothingMode.AntiAlias;
+            // subtle accent-tinted diagonal wash
+            using (LinearGradientBrush br = new LinearGradientBrush(rect,
+                BlendToward(Theme.BG_HEADER, curAccent, 0.16f), Theme.BG_HEADER, 18f))
+                g.FillRectangle(br, rect);
+            // soft accent glow behind the game icon
+            using (GraphicsPath gp = new GraphicsPath())
+            {
+                gp.AddEllipse(-46, -40, 190, 190);
+                using (PathGradientBrush pgb = new PathGradientBrush(gp))
+                {
+                    pgb.CenterColor = Color.FromArgb(60, curAccent);
+                    pgb.SurroundColors = new Color[] { Color.FromArgb(0, curAccent) };
+                    g.FillPath(pgb, gp);
+                }
+            }
+            // game icon
+            if (selectedGame >= 0 && selectedGame < gameIcons.Length && gameIcons[selectedGame] != null)
+            {
+                try { g.DrawIcon(gameIcons[selectedGame], new Rectangle(24, 26, 50, 50)); } catch { }
+            }
+            // bottom hairline into the content
+            using (Pen p = new Pen(Theme.BORDER))
+                g.DrawLine(p, 0, rect.Height - 1, rect.Width, rect.Height - 1);
         }
 
         void BuildFooter()
@@ -498,16 +547,18 @@ namespace ParasTrainer
         {
             Color accent = plugins[idx].AccentColor;
             Color accentDim = plugins[idx].AccentDimColor;
-            hdrTitle.Text = plugins[idx].GameName.ToUpper() + " TRAINER";
-            hdrTitle.ForeColor = accent;
-            hdrSubtitle.Text = plugins[idx].GameName;
+            curAccent = accent;
+            headerPanel.Invalidate();
+            hdrTitle.Text = plugins[idx].GameName.ToUpper();
+            hdrTitle.ForeColor = Theme.TEXT_PRIMARY;
+            hdrSubtitle.Text = "Trainer";
             hdrVersion.Text = coreVersion[idx].Length > 0 ? "v" + coreVersion[idx] : "";
             int subtitleW = TextRenderer.MeasureText(hdrSubtitle.Text, hdrSubtitle.Font).Width;
-            hdrVersion.Location = new Point(22 + subtitleW, 43);
+            hdrVersion.Location = new Point(98 + subtitleW, 57);
 
             if (isConnected[idx])
             {
-                hdrPlayBtn.Text = "✓   CONNECTED";
+                hdrPlayBtn.Text = "CONNECTED";
                 hdrPlayBtn.BackColor = Color.FromArgb(accent.R / 4, accent.G / 4, accent.B / 4);
                 hdrPlayBtn.ForeColor = accent;
                 hdrPlayBtn.FlatAppearance.MouseOverBackColor = hdrPlayBtn.BackColor;
