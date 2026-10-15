@@ -21,7 +21,7 @@ namespace ParasTrainer
         const int FORM_W = 730;
         const int FORM_H = 920;
 
-        const string APP_VERSION = "2.1";
+        const string APP_VERSION = "2.2";
         const string GITHUB_OWNER = "parasaudios";
         const string GITHUB_REPO = "ParasTrainer";
 
@@ -45,8 +45,6 @@ namespace ParasTrainer
         Panel sidebarPanel;
         Panel[] sidebarCards;
         Label[] sidebarNameLabels;
-        Panel[] sidebarDots;
-        Label[] sidebarStatusLabels;
         Label sidebarTitle;
 
         Panel headerPanel;
@@ -223,9 +221,9 @@ namespace ParasTrainer
 
             sidebarTitle = new Label();
             sidebarTitle.Text = "PARAS TRAINER";
-            sidebarTitle.Font = new Font("Segoe UI", 13f, FontStyle.Bold);
+            sidebarTitle.Font = new Font("Segoe UI", 12f, FontStyle.Bold);
             sidebarTitle.ForeColor = Theme.TEXT_PRIMARY;
-            sidebarTitle.Location = new Point(16, 18);
+            sidebarTitle.Location = new Point(16, 16);
             sidebarTitle.AutoSize = true;
             sidebarPanel.Controls.Add(sidebarTitle);
 
@@ -233,77 +231,76 @@ namespace ParasTrainer
             ver.Text = "v" + APP_VERSION;
             ver.Font = new Font("Segoe UI", 8f);
             ver.ForeColor = Theme.TEXT_DISABLED;
-            ver.Location = new Point(18, 44);
+            ver.Location = new Point(17, 40);
             ver.AutoSize = true;
             sidebarPanel.Controls.Add(ver);
+
+            Label games = new Label();
+            games.Text = "MY GAMES";
+            games.Font = new Font("Segoe UI", 8f, FontStyle.Bold);
+            games.ForeColor = Theme.TEXT_DISABLED;
+            games.Location = new Point(17, 66);
+            games.AutoSize = true;
+            sidebarPanel.Controls.Add(games);
 
             int n = plugins.Length;
             sidebarCards = new Panel[n];
             sidebarNameLabels = new Label[n];
-            sidebarDots = new Panel[n];
-            sidebarStatusLabels = new Label[n];
 
-            int cardY = 70;
+            int rowH = 40, rowY = 88;
             for (int i = 0; i < n; i++)
             {
                 int idx = i;
-                Panel card = new BufferedPanel();
-                card.SetBounds(10, cardY, SIDEBAR_W - 20, 60);
-                card.BackColor = Theme.BG_SIDEBAR_CARD;
-                card.Cursor = Cursors.Hand;
-                card.Paint += delegate(object s, PaintEventArgs e) {
-                    e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
-                    using (Pen p = new Pen(Theme.BORDER_CARD))
-                    {
-                        GraphicsPath path = Theme.RoundRect(0, 0, card.Width - 1, card.Height - 1, 8);
-                        e.Graphics.DrawPath(p, path);
-                        path.Dispose();
-                    }
+                Panel row = new BufferedPanel();
+                row.SetBounds(8, rowY, SIDEBAR_W - 16, rowH);
+                row.BackColor = Theme.BG_SIDEBAR;
+                row.Cursor = Cursors.Hand;
+                row.Paint += delegate(object s, PaintEventArgs e) {
+                    Graphics g = e.Graphics;
+                    g.SmoothingMode = SmoothingMode.AntiAlias;
+                    bool seld = idx == selectedGame;
+                    // rounded highlight when selected/hovered
+                    if (row.BackColor != Theme.BG_SIDEBAR)
+                        using (SolidBrush b = new SolidBrush(row.BackColor))
+                        using (GraphicsPath gp = Theme.RoundRect(0, 0, row.Width - 1, row.Height - 1, 7))
+                            g.FillPath(b, gp);
+                    // teal selection bar
+                    if (seld)
+                        using (SolidBrush b = new SolidBrush(plugins[idx].AccentColor))
+                        using (GraphicsPath gp = Theme.RoundRect(0, 7, 3, row.Height - 14, 1.5f))
+                            g.FillPath(b, gp);
+                    // game icon (or fallback glyph)
                     if (gameIcons[idx] != null)
-                    {
-                        try { e.Graphics.DrawIcon(gameIcons[idx], new Rectangle(10, 10, 40, 40)); } catch { }
-                    }
+                    { try { g.DrawIcon(gameIcons[idx], new Rectangle(12, (rowH - 22) / 2, 22, 22)); } catch { } }
+                    else
+                        using (SolidBrush b = new SolidBrush(seld ? plugins[idx].AccentColor : Theme.TEXT_SECONDARY))
+                            g.DrawString("", Theme.Glyphs(13f), b, 12, (rowH - 22) / 2);
+                    // status dot (right)
+                    Color dc = isConnected[idx] ? plugins[idx].AccentColor : Theme.STATUS_RED;
+                    using (SolidBrush b = new SolidBrush(dc))
+                        g.FillEllipse(b, row.Width - 20, (rowH - 7) / 2, 7, 7);
                 };
-                card.MouseEnter += delegate { if (idx != selectedGame) card.BackColor = Theme.BG_SIDEBAR_HOVER; };
-                card.MouseLeave += delegate { if (idx != selectedGame) card.BackColor = Theme.BG_SIDEBAR_CARD; };
-                card.Click += delegate { SwitchToGame(idx); };
-                sidebarPanel.Controls.Add(card);
-                sidebarCards[i] = card;
+                row.MouseEnter += delegate { if (idx != selectedGame) { row.BackColor = Theme.BG_SIDEBAR_HOVER; row.Invalidate(); } };
+                row.MouseLeave += delegate { if (idx != selectedGame) { row.BackColor = Theme.BG_SIDEBAR; row.Invalidate(); } };
+                row.Click += delegate { SwitchToGame(idx); };
+                sidebarPanel.Controls.Add(row);
+                sidebarCards[i] = row;
 
                 Label name = new Label();
                 name.Text = plugins[i].GameName;
-                name.Font = new Font("Segoe UI", 9.5f, FontStyle.Bold);
-                name.ForeColor = Theme.TEXT_PRIMARY;
-                name.Location = new Point(58, 10);
-                name.Size = new Size(SIDEBAR_W - 90, 20);
+                name.Font = new Font("Segoe UI", 9.5f);
+                name.ForeColor = Theme.TEXT_SECONDARY;
+                name.BackColor = Color.Transparent;
+                name.AutoEllipsis = true;
+                name.TextAlign = ContentAlignment.MiddleLeft;
+                name.Location = new Point(42, 0);
+                name.Size = new Size(SIDEBAR_W - 16 - 42 - 22, rowH);
                 name.Click += delegate { SwitchToGame(idx); };
                 name.Cursor = Cursors.Hand;
-                card.Controls.Add(name);
+                row.Controls.Add(name);
                 sidebarNameLabels[i] = name;
 
-                Panel dot = new Panel();
-                dot.SetBounds(58, 36, 8, 8);
-                dot.BackColor = Theme.STATUS_RED;
-                dot.Paint += delegate(object s, PaintEventArgs e) {
-                    e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
-                    using (SolidBrush b = new SolidBrush(((Panel)s).BackColor))
-                        e.Graphics.FillEllipse(b, 0, 0, 7, 7);
-                };
-                card.Controls.Add(dot);
-                sidebarDots[i] = dot;
-
-                Label status = new Label();
-                status.Text = "Offline";
-                status.Font = new Font("Segoe UI", 8f);
-                status.ForeColor = Theme.TEXT_DISABLED;
-                status.Location = new Point(70, 33);
-                status.AutoSize = true;
-                status.Click += delegate { SwitchToGame(idx); };
-                status.Cursor = Cursors.Hand;
-                card.Controls.Add(status);
-                sidebarStatusLabels[i] = status;
-
-                cardY += 68;
+                rowY += rowH + 3;
             }
 
             updateBtn = new Button();
@@ -311,11 +308,12 @@ namespace ParasTrainer
             updateBtn.FlatAppearance.BorderSize = 1;
             updateBtn.FlatAppearance.BorderColor = Theme.BORDER_CARD;
             updateBtn.FlatAppearance.MouseOverBackColor = Theme.BG_SIDEBAR_HOVER;
-            updateBtn.SetBounds(10, FORM_H - 120, SIDEBAR_W - 20, 30);
+            updateBtn.SetBounds(10, FORM_H - 120, SIDEBAR_W - 20, 32);
             updateBtn.Anchor = AnchorStyles.Bottom | AnchorStyles.Left;
-            updateBtn.Text = "Check for Updates";
+            try { using (GraphicsPath gp = Theme.RoundRect(0, 0, SIDEBAR_W - 20, 32, 7)) updateBtn.Region = new Region(gp); } catch { }
+            updateBtn.Text = "Check for updates";
             updateBtn.Font = new Font("Segoe UI", 8.5f);
-            updateBtn.BackColor = Theme.BG_SIDEBAR_CARD;
+            updateBtn.BackColor = Theme.BG_SIDEBAR;
             updateBtn.ForeColor = Theme.TEXT_SECONDARY;
             updateBtn.Cursor = Cursors.Hand;
             updateBtn.Click += delegate { CheckForUpdate(); };
@@ -587,22 +585,10 @@ namespace ParasTrainer
         {
             for (int i = 0; i < plugins.Length; i++)
             {
-                sidebarCards[i].BackColor = i == selectedGame ? Theme.BG_SIDEBAR_SEL : Theme.BG_SIDEBAR_CARD;
-                sidebarCards[i].Invalidate();
-
-                if (isConnected[i])
-                {
-                    sidebarDots[i].BackColor = Theme.ACCENT_GREEN;
-                    sidebarStatusLabels[i].Text = "Connected";
-                    sidebarStatusLabels[i].ForeColor = Theme.ACCENT_GREEN;
-                }
-                else
-                {
-                    sidebarDots[i].BackColor = Theme.STATUS_RED;
-                    sidebarStatusLabels[i].Text = "Offline";
-                    sidebarStatusLabels[i].ForeColor = Theme.TEXT_DISABLED;
-                }
-                sidebarDots[i].Invalidate();
+                bool seld = i == selectedGame;
+                sidebarCards[i].BackColor = seld ? Theme.BG_SIDEBAR_SEL : Theme.BG_SIDEBAR;
+                sidebarNameLabels[i].ForeColor = seld ? Theme.TEXT_PRIMARY : Theme.TEXT_SECONDARY;
+                sidebarCards[i].Invalidate();   // repaints selection bar + status dot
             }
         }
 
@@ -614,10 +600,8 @@ namespace ParasTrainer
             headerPanel.Invalidate();
             hdrTitle.Text = plugins[idx].GameName.ToUpper();
             hdrTitle.ForeColor = Theme.TEXT_PRIMARY;
-            hdrSubtitle.Text = "Trainer";
-            hdrVersion.Text = coreVersion[idx].Length > 0 ? "v" + coreVersion[idx] : "";
-            int subtitleW = TextRenderer.MeasureText(hdrSubtitle.Text, hdrSubtitle.Font).Width;
-            hdrVersion.Location = new Point(34 + subtitleW, 61);
+            hdrSubtitle.Text = coreVersion[idx].Length > 0 ? "Trainer  ·  v" + coreVersion[idx] : "Trainer";
+            hdrVersion.Text = "";
 
             if (isConnected[idx])
             {
@@ -629,8 +613,9 @@ namespace ParasTrainer
                 hdrStatusDot.BackColor = Theme.ACCENT_GREEN;
                 hdrStatusLabel.Text = "Connected";
                 hdrStatusLabel.ForeColor = Theme.ACCENT_GREEN;
-                hdrStatusDetail.Text = patchesOk[idx] + " patches active";
-                hdrStatusDetail.ForeColor = accentDim;
+                hdrStatusDetail.Text = patchesOk[idx] + " patches active"
+                    + (coreVersion[idx].Length > 0 ? "    •    Core v" + coreVersion[idx] : "");
+                hdrStatusDetail.ForeColor = Theme.TEXT_DISABLED;
             }
             else if (isLaunching[idx])
             {

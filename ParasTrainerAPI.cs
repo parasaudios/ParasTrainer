@@ -9,33 +9,52 @@ namespace ParasTrainer
 {
     public static class Theme
     {
-        // Neutral charcoal palette with elevated card surfaces (modern dark UI, WAND-style).
-        public static readonly Color BG_SIDEBAR = Color.FromArgb(18, 19, 24);
-        public static readonly Color BG_SIDEBAR_CARD = Color.FromArgb(30, 32, 39);
-        public static readonly Color BG_SIDEBAR_HOVER = Color.FromArgb(39, 42, 51);
-        public static readonly Color BG_SIDEBAR_SEL = Color.FromArgb(45, 49, 60);
-        public static readonly Color BG_MAIN = Color.FromArgb(22, 23, 28);
-        public static readonly Color BG_HEADER = Color.FromArgb(26, 28, 34);
-        public static readonly Color BG_CARD = Color.FromArgb(32, 35, 43);
-        public static readonly Color BG_INPUT = Color.FromArgb(42, 45, 54);
-        public static readonly Color BG_BTN_HOVER = Color.FromArgb(52, 56, 67);
-        public static readonly Color BG_ROW_HOVER = Color.FromArgb(40, 44, 53);
-        public static readonly Color TEXT_PRIMARY = Color.FromArgb(235, 237, 241);
-        public static readonly Color TEXT_SECONDARY = Color.FromArgb(154, 161, 173);
-        public static readonly Color TEXT_DISABLED = Color.FromArgb(98, 105, 117);
-        public static readonly Color BORDER = Color.FromArgb(44, 47, 57);
-        public static readonly Color BORDER_CARD = Color.FromArgb(52, 56, 67);
-        public static readonly Color STATUS_RED = Color.FromArgb(235, 92, 92);
+        // WeMod/WAND-style dark palette: near-black shell, slightly-lifted card surfaces,
+        // teal accent. Colours sampled from the approved redesign mockup.
+        public static readonly Color BG_SIDEBAR = Color.FromArgb(18, 19, 24);      // #121318
+        public static readonly Color BG_SIDEBAR_CARD = Color.FromArgb(27, 30, 38); // row rest (transparent-ish)
+        public static readonly Color BG_SIDEBAR_HOVER = Color.FromArgb(31, 34, 42);
+        public static readonly Color BG_SIDEBAR_SEL = Color.FromArgb(32, 36, 45);   // #20242d
+        public static readonly Color BG_MAIN = Color.FromArgb(21, 22, 27);         // #15161b
+        public static readonly Color BG_HEADER = Color.FromArgb(27, 29, 36);       // #1b1d24 (bars/footer)
+        public static readonly Color BG_CARD = Color.FromArgb(27, 30, 38);         // #1b1e26
+        public static readonly Color BG_INPUT = Color.FromArgb(38, 42, 51);        // #262a33
+        public static readonly Color BG_BTN_HOVER = Color.FromArgb(48, 53, 64);
+        public static readonly Color BG_ROW_HOVER = Color.FromArgb(33, 37, 46);
+        public static readonly Color TEXT_PRIMARY = Color.FromArgb(233, 235, 239); // #e9ebef
+        public static readonly Color TEXT_SECONDARY = Color.FromArgb(153, 160, 172); // #99a0ac
+        public static readonly Color TEXT_HEADING = Color.FromArgb(195, 201, 212); // #c3c9d4 (category labels)
+        public static readonly Color TEXT_DISABLED = Color.FromArgb(107, 114, 128); // #6b7280
+        public static readonly Color BORDER = Color.FromArgb(35, 39, 47);          // #23272f (row dividers)
+        public static readonly Color BORDER_CARD = Color.FromArgb(44, 48, 58);
+        public static readonly Color STATUS_RED = Color.FromArgb(227, 91, 91);     // #e35b5b
         public static readonly Color ACCENT_AMBER = Color.FromArgb(245, 173, 70);
-        public static readonly Color ACCENT_GREEN = Color.FromArgb(52, 211, 153);
-        public static readonly Color HK_BG = Color.FromArgb(38, 41, 50);
+        public static readonly Color ACCENT_GREEN = Color.FromArgb(45, 212, 191);  // teal (connected/on)
+        public static readonly Color HK_BG = Color.FromArgb(38, 42, 51);           // #262a33
         public static readonly Color HK_BORDER = Color.FromArgb(56, 60, 71);
-        public static readonly Color HK_TEXT = Color.FromArgb(140, 147, 159);
+        public static readonly Color HK_TEXT = Color.FromArgb(139, 147, 160);      // #8b93a0
         public static readonly Color HK_EDIT_BG = Color.FromArgb(120, 48, 48);
+        public static readonly Color ICON_MUTED = Color.FromArgb(78, 84, 95);      // (i)/pin glyphs at rest
 
         public const int ROW_H = 46;
         public const int PAD = 14;
-        public const int CARD_W = 488;
+        // Leaves room for window borders + the AutoScroll vertical scrollbar so the
+        // right-edge row glyphs (hotkey pill / pin) and header chevron never clip.
+        public const int CARD_W = 460;
+
+        // Segoe MDL2 Assets glyphs (present on Win10/11) — used for category, row and chrome icons.
+        public const string GLYPH_CHEVRON_DOWN = "";
+        public const string GLYPH_INFO = "";
+        public const string GLYPH_PIN = "";
+        public const string GLYPH_ADD = "";
+        public const string GLYPH_REMOVE = "";
+        public const string ICON_FONT = "Segoe MDL2 Assets";
+
+        public static Font Glyphs(float size)
+        {
+            try { return new Font(ICON_FONT, size); }
+            catch { return new Font("Segoe UI", size); }
+        }
 
         public static GraphicsPath RoundRect(float x, float y, float w, float h, float r)
         {
@@ -79,7 +98,7 @@ namespace ParasTrainer
         {
             SetStyle(ControlStyles.AllPaintingInWmPaint | ControlStyles.UserPaint
                 | ControlStyles.OptimizedDoubleBuffer | ControlStyles.SupportsTransparentBackColor, true);
-            Size = new Size(44, 24);
+            Size = new Size(40, 22);
             Cursor = Cursors.Hand;
             BackColor = Color.Transparent;
             _thumbPos = 0f;
@@ -127,7 +146,7 @@ namespace ParasTrainer
         {
             Graphics g = e.Graphics;
             g.SmoothingMode = SmoothingMode.AntiAlias;
-            Color offColor = _hovered ? Color.FromArgb(64, 68, 80) : Color.FromArgb(50, 54, 64);
+            Color offColor = _hovered ? Color.FromArgb(60, 66, 78) : Color.FromArgb(52, 58, 69);
             Color track = LerpColor(offColor, _accentColor, _colorBlend);
             using (SolidBrush b = new SolidBrush(track))
                 g.FillPath(b, Theme.RoundRect(0, 0, Width - 1, Height - 1, Height / 2));
@@ -138,7 +157,9 @@ namespace ParasTrainer
             float minX = 3f;
             float maxX = Width - Height + 3f;
             float thumbX = minX + (maxX - minX) * _thumbPos;
-            using (SolidBrush b = new SolidBrush(Color.White))
+            // thumb: muted grey when off, white when on
+            Color thumb = LerpColor(Color.FromArgb(174, 180, 191), Color.White, _colorBlend);
+            using (SolidBrush b = new SolidBrush(thumb))
                 g.FillEllipse(b, thumbX, 3, thumbD, thumbD);
         }
 
@@ -230,20 +251,74 @@ namespace ParasTrainer
 
         public int SectionHeader(Panel parent, int y, string text)
         {
-            // accent bar + brighter label gives each group a clear visual anchor
-            Panel bar = new Panel();
-            bar.SetBounds(Theme.PAD, y + 3, 3, 14);
-            bar.BackColor = AccentColor;
-            parent.Controls.Add(bar);
+            // WAND-style category header: accent glyph + spaced caps label + collapse chevron,
+            // sitting ABOVE its card (the card is drawn by the next MakeCard call).
+            Label icon = new Label();
+            icon.Text = SectionGlyph(text);
+            icon.Font = Theme.Glyphs(11f);
+            icon.ForeColor = AccentColor;
+            icon.AutoSize = true;
+            icon.BackColor = Color.Transparent;
+            icon.Location = new Point(Theme.PAD + 2, y + 2);
+            parent.Controls.Add(icon);
 
             Label lbl = new Label();
             lbl.Text = text;
-            lbl.Font = new Font("Segoe UI", 9.5f, FontStyle.Bold);
-            lbl.ForeColor = Theme.TEXT_PRIMARY;
-            lbl.Location = new Point(Theme.PAD + 12, y);
+            lbl.UseMnemonic = false;   // keep literal '&' (e.g. "RESPAWN & TELEPORTER")
+            lbl.Font = new Font("Segoe UI", 9f, FontStyle.Bold);
+            lbl.ForeColor = Theme.TEXT_HEADING;
+            lbl.Location = new Point(Theme.PAD + 26, y + 3);
             lbl.AutoSize = true;
             parent.Controls.Add(lbl);
-            return y + 24;
+
+            Label chev = new Label();
+            chev.Text = Theme.GLYPH_CHEVRON_DOWN;
+            chev.Font = Theme.Glyphs(9f);
+            chev.ForeColor = Theme.TEXT_DISABLED;
+            chev.AutoSize = true;
+            chev.BackColor = Color.Transparent;
+            chev.Location = new Point(Theme.PAD + Theme.CARD_W - 22, y + 4);
+            parent.Controls.Add(chev);
+
+            return y + 30;
+        }
+
+        // Map a category title to a Segoe MDL2 Assets glyph for its header icon.
+        static string SectionGlyph(string title)
+        {
+            string t = title.ToUpperInvariant();
+            if (t.Contains("COMBAT")) return "";                               // lightning
+            if (t.Contains("BUFF STACK")) return "";                            // star (filled)
+            if (t.Contains("APPLY BUFF")) return "";                            // star (outline)
+            if (t.Contains("MOVEMENT")) return "";                              // play / go
+            if (t.Contains("VACUUM")) return "";                                // download (pull-in)
+            if (t.Contains("MULTIPLIER") || t.Contains("EFFECT")) return "";    // tuning
+            if (t.Contains("RESPAWN") || t.Contains("TELEPORT")) return "";     // refresh
+            if (t.Contains("LUNAR")) return "";                                 // shop/coin
+            if (t.Contains("DLC") || t.Contains("HALLOWED")) return "";         // star
+            if (t.Contains("ESP") || t.Contains("MAP")) return "";              // search
+            if (t.Contains("HOST TOGGLE")) return "";                           // gear
+            if (t.Contains("ITEM BOOST")) return "";                            // add
+            if (t.Contains("MONEY")) return "";                                 // download
+            if (t.Contains("ACTION")) return "";                                // lightning
+            if (t.Contains("GIVE ITEM")) return "";                             // shop
+            if (t.Contains("TIER")) return "";                                  // filter
+            if (t.Contains("CONSOLE") || t.Contains("SERVER")) return "";       // keypad
+            return "";                                                          // gear (default)
+        }
+
+        // Small MDL2 glyph as a transparent label.
+        public Label GlyphLabel(Panel parent, int x, int y, string glyph, float size, Color color)
+        {
+            Label l = new Label();
+            l.Text = glyph;
+            l.Font = Theme.Glyphs(size);
+            l.ForeColor = color;
+            l.AutoSize = true;
+            l.BackColor = Color.Transparent;
+            l.Location = new Point(x, y);
+            parent.Controls.Add(l);
+            return l;
         }
 
         public Panel MakeCard(Panel parent, int y, int rowCount)
@@ -295,11 +370,24 @@ namespace ParasTrainer
             lbl.Location = new Point(Theme.PAD, (Theme.ROW_H - 19) / 2);
             row.Controls.Add(lbl);
 
-            int hkW = 46, swW = 44, gap = 12;
+            // (i) info glyph right after the label (decorative affordance, matches mockup)
+            int lblW = TextRenderer.MeasureText(label, lbl.Font).Width;
+            Label info = GlyphLabel(row, Theme.PAD + lblW + 4, (Theme.ROW_H - 16) / 2, Theme.GLYPH_INFO, 8.5f, Theme.ICON_MUTED);
+
+            // right cluster (right→left): pin · hotkey pill · toggle
+            int hkW = 46, swW = 40, pinW = 18;
+            int pinX = row.Width - Theme.PAD - pinW;
+            int hkX = pinX - 6 - hkW;
+            int swX = hkX - 10 - swW;
+
+            Label pin = GlyphLabel(row, pinX, (Theme.ROW_H - 16) / 2, Theme.GLYPH_PIN, 9.5f, Theme.ICON_MUTED);
+            pin.Anchor = AnchorStyles.Top | AnchorStyles.Right;
+
             ToggleSwitch sw = new ToggleSwitch();
             sw.AccentColor = AccentColor;
             sw.Checked = defaultOn;
-            sw.Location = new Point(row.Width - Theme.PAD - hkW - gap - swW, (Theme.ROW_H - 24) / 2);
+            sw.Location = new Point(swX, (Theme.ROW_H - sw.Height) / 2);
+            sw.Anchor = AnchorStyles.Top | AnchorStyles.Right;
             row.Controls.Add(sw);
 
             if (!FeatureStates.ContainsKey(feature))
@@ -314,9 +402,10 @@ namespace ParasTrainer
                 host.SendCommand("TOGGLE:" + feature);
             };
 
-            HotkeyBtn(row, row.Width - Theme.PAD - hkW, (Theme.ROW_H - 24) / 2, feature);
-
+            HotkeyBtn(row, hkX, (Theme.ROW_H - 24) / 2, feature);
             Button hk = HotkeyButtons.ContainsKey(feature) ? HotkeyButtons[feature] : null;
+            if (hk != null) hk.Anchor = AnchorStyles.Top | AnchorStyles.Right;
+
             EventHandler onEnter = delegate { row.BackColor = Theme.BG_ROW_HOVER; };
             EventHandler onLeave = delegate {
                 if (!row.ClientRectangle.Contains(row.PointToClient(Cursor.Position)))
@@ -324,6 +413,8 @@ namespace ParasTrainer
             };
             row.MouseEnter += onEnter; row.MouseLeave += onLeave;
             lbl.MouseEnter += onEnter; lbl.MouseLeave += onLeave;
+            info.MouseEnter += onEnter; info.MouseLeave += onLeave;
+            pin.MouseEnter += onEnter; pin.MouseLeave += onLeave;
             sw.MouseEnter += onEnter; sw.MouseLeave += onLeave;
             if (hk != null) { hk.MouseEnter += onEnter; hk.MouseLeave += onLeave; }
         }
@@ -349,6 +440,84 @@ namespace ParasTrainer
             return tb;
         }
 
+        // WAND-style numeric stepper row: label on the left, [−] [editable value] [+] on the right.
+        // Commits on +/−, Enter or focus-loss (no separate Apply button). Returns the value box
+        // so ParseStatus can keep it in sync via SyncInput.
+        public TextBox StepperRow(Panel card, int rowY, string label, string defVal, int min, int max, int step, Action<int> commit)
+        {
+            Label lbl = new Label();
+            lbl.Text = label;
+            lbl.Font = new Font("Segoe UI", 9.5f);
+            lbl.ForeColor = Theme.TEXT_SECONDARY;
+            lbl.AutoSize = true;
+            lbl.BackColor = Color.Transparent;
+            lbl.Location = new Point(Theme.PAD + 2, rowY + (Theme.ROW_H - 18) / 2);
+            card.Controls.Add(lbl);
+
+            int btnSz = 26, valW = 46, gap = 3;
+            int plusX = card.Width - Theme.PAD - btnSz;
+            int valX = plusX - gap - valW;
+            int minusX = valX - gap - btnSz;
+            int cy = rowY + (Theme.ROW_H - btnSz) / 2;
+
+            TextBox tb = new TextBox();
+            tb.SetBounds(valX, rowY + (Theme.ROW_H - 20) / 2, valW, 20);
+            tb.BackColor = Theme.BG_INPUT;
+            tb.ForeColor = Theme.TEXT_PRIMARY;
+            tb.BorderStyle = BorderStyle.None;
+            tb.Font = new Font("Segoe UI", 10f);
+            tb.TextAlign = HorizontalAlignment.Center;
+            tb.Text = defVal;
+            card.Controls.Add(tb);
+
+            PluginHost host = this;
+            Action commitNow = delegate {
+                int v;
+                if (int.TryParse(tb.Text, out v))
+                {
+                    v = Math.Max(min, Math.Min(max, v));
+                    if (v.ToString() != tb.Text) tb.Text = v.ToString();
+                    commit(v);
+                    host.AppliedAt[tb] = DateTime.Now;
+                }
+            };
+            tb.TextChanged += delegate { host.DirtyInputs.Add(tb); };
+            tb.Leave += delegate { commitNow(); };
+            tb.KeyDown += delegate(object s2, KeyEventArgs e2) {
+                if (e2.KeyCode == Keys.Enter) { e2.SuppressKeyPress = true; commitNow(); }
+            };
+
+            StepBtn(card, minusX, cy, btnSz, Theme.GLYPH_REMOVE, delegate { Bump(tb, -step, min, max, commitNow); });
+            StepBtn(card, plusX, cy, btnSz, Theme.GLYPH_ADD, delegate { Bump(tb, step, min, max, commitNow); });
+
+            return tb;
+        }
+
+        static void Bump(TextBox tb, int delta, int min, int max, Action commit)
+        {
+            int v; if (!int.TryParse(tb.Text, out v)) v = min;
+            v = Math.Max(min, Math.Min(max, v + delta));
+            tb.Text = v.ToString();
+            commit();
+        }
+
+        void StepBtn(Panel parent, int x, int y, int sz, string glyph, EventHandler onClick)
+        {
+            Button b = new Button();
+            b.FlatStyle = FlatStyle.Flat;
+            b.FlatAppearance.BorderSize = 0;
+            b.FlatAppearance.MouseOverBackColor = Theme.BG_BTN_HOVER;
+            b.SetBounds(x, y, sz, sz);
+            try { using (GraphicsPath gp = Theme.RoundRect(0, 0, sz, sz, 6)) b.Region = new Region(gp); } catch { }
+            b.BackColor = Theme.BG_INPUT;
+            b.ForeColor = Theme.TEXT_HEADING;
+            b.Font = Theme.Glyphs(8.5f);
+            b.Text = glyph;
+            b.Cursor = Cursors.Hand;
+            b.Click += onClick;
+            parent.Controls.Add(b);
+        }
+
         public TextBox MakeInput(Panel parent, int x, int y, int w, string defVal)
         {
             TextBox tb = new TextBox();
@@ -366,12 +535,12 @@ namespace ParasTrainer
         {
             Button btn = new Button();
             btn.FlatStyle = FlatStyle.Flat;
-            btn.FlatAppearance.BorderSize = 1;
-            btn.FlatAppearance.BorderColor = Theme.BORDER_CARD;
+            btn.FlatAppearance.BorderSize = 0;
             btn.FlatAppearance.MouseOverBackColor = Theme.BG_BTN_HOVER;
             btn.SetBounds(x, y, w, 28);
+            try { using (GraphicsPath gp = Theme.RoundRect(0, 0, w, 28, 7)) btn.Region = new Region(gp); } catch { }
             btn.Text = text;
-            btn.Font = new Font("Segoe UI", 8.5f);
+            btn.Font = new Font("Segoe UI", 9f);
             btn.BackColor = Theme.BG_INPUT;
             btn.ForeColor = Theme.TEXT_PRIMARY;
             btn.Cursor = Cursors.Hand;

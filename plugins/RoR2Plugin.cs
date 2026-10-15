@@ -16,7 +16,7 @@ namespace ParasTrainer
         public override Color AccentDimColor { get { return Color.FromArgb(19, 78, 74); } }
         public override string IconPath { get { return @"C:\Users\Para\RoR2Trainer\app.ico"; } }
         public override string IpcDirectory { get { return Path.Combine(Path.GetTempPath(), "ror2_trainer"); } }
-        public override string PluginVersion { get { return "74"; } }
+        public override string PluginVersion { get { return "75"; } }
 
         private TextBox itemMultInput;
         private TextBox iemDmg, iemAtkSpd, iemCrit, iemMoveSpd, iemSurv, iemOther;
@@ -32,6 +32,9 @@ namespace ParasTrainer
         private bool catalogLoaded;
         private bool espLoading;
         private List<string[]> items = new List<string[]>();
+
+        private Button pillNonHost, pillHost;
+        private Panel nonHostPanel, hostPanel;
 
         // Survivor bodies for the Respawn-As dropdown.
         private string[][] bodyList = {
@@ -65,47 +68,67 @@ namespace ParasTrainer
             b["InfiniteLunar"] = Keys.None;
         }
 
-        // ── Top-level: split the panel into Non-Host and Host tabs ──
+        // ── Top-level: pill switcher (Non-host / Host) over two visibility-toggled panels ──
         public override void BuildPanel(Panel c)
         {
-            TabControl tabs = new TabControl();
-            tabs.Dock = DockStyle.Fill;
-            tabs.SizeMode = TabSizeMode.Fixed;
-            tabs.ItemSize = new Size(((Theme.CARD_W + Theme.PAD * 2) / 2), 30);
-            tabs.DrawMode = TabDrawMode.OwnerDrawFixed;
-            tabs.DrawItem += DrawTab;
+            Panel tabBar = new Panel();
+            tabBar.Dock = DockStyle.Top;
+            tabBar.Height = 46;
+            tabBar.BackColor = Theme.BG_MAIN;
+            c.Controls.Add(tabBar);
 
-            TabPage nonHostTab = new TabPage("NON-HOST"); nonHostTab.BackColor = Theme.BG_MAIN;
-            TabPage hostTab = new TabPage("HOST"); hostTab.BackColor = Theme.BG_MAIN;
-            tabs.TabPages.Add(nonHostTab);
-            tabs.TabPages.Add(hostTab);
-            c.Controls.Add(tabs);
+            pillNonHost = MakePill(tabBar, Theme.PAD, 104, "Non-host");
+            pillHost = MakePill(tabBar, Theme.PAD + 104 + 6, 72, "Host");
+            pillNonHost.Click += delegate { SelectTab(0); };
+            pillHost.Click += delegate { SelectTab(1); };
 
-            BufferedPanel nhp = new BufferedPanel();
-            nhp.Dock = DockStyle.Fill; nhp.AutoScroll = true; nhp.BackColor = Theme.BG_MAIN;
-            nonHostTab.Controls.Add(nhp);
-            BufferedPanel hp = new BufferedPanel();
-            hp.Dock = DockStyle.Fill; hp.AutoScroll = true; hp.BackColor = Theme.BG_MAIN;
-            hostTab.Controls.Add(hp);
+            nonHostPanel = new BufferedPanel();
+            nonHostPanel.Dock = DockStyle.Fill; nonHostPanel.AutoScroll = true; nonHostPanel.BackColor = Theme.BG_MAIN;
+            hostPanel = new BufferedPanel();
+            hostPanel.Dock = DockStyle.Fill; hostPanel.AutoScroll = true; hostPanel.BackColor = Theme.BG_MAIN;
+            c.Controls.Add(nonHostPanel);
+            c.Controls.Add(hostPanel);
+            // Dock resolves back→front: tabBar must dock first (claim the top strip),
+            // the fill panels last (claim the remainder).
+            tabBar.SendToBack();
+            nonHostPanel.BringToFront();
+            hostPanel.BringToFront();
 
-            BuildNonHostTab(nhp);
-            BuildHostTab(hp);
+            BuildNonHostTab(nonHostPanel);
+            BuildHostTab(hostPanel);
+            SelectTab(0);
         }
 
-        private void DrawTab(object s, DrawItemEventArgs e)
+        private Button MakePill(Panel bar, int x, int w, string text)
         {
-            TabControl tc = (TabControl)s;
-            bool sel = e.Index == tc.SelectedIndex;
-            Rectangle r = e.Bounds;
-            using (SolidBrush bg = new SolidBrush(sel ? Theme.BG_CARD : Theme.BG_HEADER))
-                e.Graphics.FillRectangle(bg, r);
-            if (sel)
-                using (SolidBrush acc = new SolidBrush(AccentColor))
-                    e.Graphics.FillRectangle(acc, r.Left, r.Bottom - 3, r.Width, 3);
-            TextRenderer.DrawText(e.Graphics, tc.TabPages[e.Index].Text,
-                new Font("Segoe UI", 9.5f, FontStyle.Bold), r,
-                sel ? AccentColor : Theme.TEXT_SECONDARY,
-                TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter);
+            Button b = new Button();
+            b.FlatStyle = FlatStyle.Flat;
+            b.FlatAppearance.BorderSize = 0;
+            b.SetBounds(x, 8, w, 30);
+            b.Region = new Region(Theme.RoundRect(0, 0, w, 30, 15));
+            b.Font = new Font("Segoe UI", 9.5f, FontStyle.Bold);
+            b.Text = text;
+            b.BackColor = Theme.BG_INPUT;
+            b.ForeColor = Theme.TEXT_SECONDARY;
+            b.Cursor = Cursors.Hand;
+            bar.Controls.Add(b);
+            return b;
+        }
+
+        private void SelectTab(int i)
+        {
+            if (nonHostPanel != null) nonHostPanel.Visible = (i == 0);
+            if (hostPanel != null) hostPanel.Visible = (i == 1);
+            StylePill(pillNonHost, i == 0);
+            StylePill(pillHost, i == 1);
+        }
+
+        private void StylePill(Button b, bool active)
+        {
+            if (b == null) return;
+            b.BackColor = active ? AccentColor : Theme.BG_INPUT;
+            b.ForeColor = active ? Theme.BG_MAIN : Theme.TEXT_SECONDARY;
+            b.FlatAppearance.MouseOverBackColor = active ? AccentColor : Theme.BG_BTN_HOVER;
         }
 
         // ════════════════════════════════════════════════════════════════
@@ -117,11 +140,15 @@ namespace ParasTrainer
 
             // COMBAT
             y = Host.SectionHeader(c, y, "COMBAT");
-            Panel cc = Host.MakeCard(c, y, 2);
+            Panel cc = Host.MakeCard(c, y, 4);
             Host.ToggleRow(cc, 0, "GodMode", "God Mode");
             Host.Divider(cc, Theme.ROW_H);
             Host.ToggleRow(cc, Theme.ROW_H, "NoCooldowns", "No Cooldowns");
-            y += Theme.ROW_H * 2 + Theme.PAD;
+            Host.Divider(cc, Theme.ROW_H * 2);
+            Host.ToggleRow(cc, Theme.ROW_H * 2, "ReviveSafety", "Revive Safety (auto)");
+            Host.Divider(cc, Theme.ROW_H * 3);
+            Host.ToggleRow(cc, Theme.ROW_H * 3, "NullifyCurse", "Nullify Shaped Glass (host)");
+            y += Theme.ROW_H * 4 + Theme.PAD;
 
             // BUFF STACKING
             y = Host.SectionHeader(c, y, "BUFF STACKING");
@@ -177,9 +204,8 @@ namespace ParasTrainer
             ivBtn.Click += delegate { Host.SendCommand("VACUUM_ITEMS"); };
             Host.HotkeyBtn(ivc, Theme.CARD_W - Theme.PAD - 46, 9, "VacuumItems");
             Host.Divider(ivc, Theme.ROW_H);
-            itemVacRange = Host.ValueRow(ivc, Theme.ROW_H, "Range:", "70", "Apply", delegate {
-                int v; if (int.TryParse(itemVacRange.Text, out v))
-                { v = Math.Max(10, Math.Min(300, v)); Host.SendCommand("SET:ItemVacuumRange:" + v); }
+            itemVacRange = Host.StepperRow(ivc, Theme.ROW_H, "Range", "70", 10, 300, 10, delegate(int v) {
+                Host.SendCommand("SET:ItemVacuumRange:" + v);
             });
             y += Theme.ROW_H * 2 + Theme.PAD;
 
@@ -188,38 +214,17 @@ namespace ParasTrainer
             Panel iemc = Host.MakeCard(c, y, 8);
             Host.ToggleRow(iemc, 0, "ItemEffectMult", "Item Effect Multiplier");
             Host.Divider(iemc, Theme.ROW_H);
-            string[] iemLabels = { "Damage:", "Atk Speed:", "Crit:", "Move Spd:", "Survival:", "All Other:" };
+            string[] iemLabels = { "Damage", "Attack Speed", "Crit", "Move Speed", "Survival", "All Other" };
             string[] iemKeys = { "IemDamage", "IemAtkSpd", "IemCrit", "IemMoveSpd", "IemSurvival", "IemOther" };
             TextBox[] iemInputs = new TextBox[6];
             for (int i = 0; i < 6; i++)
             {
                 int row = i + 1;
-                Label il = new Label();
-                il.Text = iemLabels[i];
-                il.Font = new Font("Segoe UI", 9f);
-                il.ForeColor = Theme.TEXT_SECONDARY;
-                il.Location = new Point(Theme.PAD + 18, Theme.ROW_H * row + 12);
-                il.AutoSize = true;
-                iemc.Controls.Add(il);
-                iemInputs[i] = Host.MakeInput(iemc, 130, Theme.ROW_H * row + 8, 60, "1");
-                TextBox iemTb = iemInputs[i];
                 string iemKey = iemKeys[i];
-                iemTb.TextChanged += delegate { Host.DirtyInputs.Add(iemTb); };   // don't let the poll clobber edits
-                // Auto-apply as soon as the user finishes editing (focus lost) or presses Enter —
-                // no separate "Set All" click required.
-                System.EventHandler iemApply = delegate {
-                    int v; if (int.TryParse(iemTb.Text, out v))
-                    {
-                        v = Math.Max(1, Math.Min(100, v));
-                        if (v.ToString() != iemTb.Text) iemTb.Text = v.ToString();
-                        Host.SendCommand("SET:" + iemKey + ":" + v);
-                        Host.AppliedAt[iemTb] = DateTime.Now;
-                    }
-                };
-                iemTb.Leave += iemApply;
-                iemTb.KeyDown += delegate(object s2, KeyEventArgs e2) {
-                    if (e2.KeyCode == Keys.Enter) { e2.SuppressKeyPress = true; iemApply(s2, EventArgs.Empty); }
-                };
+                // stepper auto-commits on +/−, Enter, or focus-loss
+                iemInputs[i] = Host.StepperRow(iemc, Theme.ROW_H * row, iemLabels[i], "1", 1, 100, 1, delegate(int v) {
+                    Host.SendCommand("SET:" + iemKey + ":" + v);
+                });
                 if (i < 5) Host.Divider(iemc, Theme.ROW_H * (row + 1));
             }
             iemDmg = iemInputs[0]; iemAtkSpd = iemInputs[1]; iemCrit = iemInputs[2];
@@ -458,9 +463,8 @@ namespace ParasTrainer
             Panel ibc = Host.MakeCard(c, y, 4);
             Host.ToggleRow(ibc, 0, "ItemMultiplier", "Item Multiplier");
             Host.Divider(ibc, Theme.ROW_H);
-            itemMultInput = Host.ValueRow(ibc, Theme.ROW_H, "Multiplier:", "2", "Apply", delegate {
-                int v; if (int.TryParse(itemMultInput.Text, out v) && v > 0)
-                    Host.SendCommand("SET:ItemMultiplierVal:" + v);
+            itemMultInput = Host.StepperRow(ibc, Theme.ROW_H, "Multiplier", "2", 1, 99, 1, delegate(int v) {
+                Host.SendCommand("SET:ItemMultiplierVal:" + v);
             });
             Host.Divider(ibc, Theme.ROW_H * 2);
             Host.ToggleRow(ibc, Theme.ROW_H * 2, "BonusRandomItem", "Bonus Random Item");
@@ -473,9 +477,8 @@ namespace ParasTrainer
             Panel mvc = Host.MakeCard(c, y, 2);
             Host.ToggleRow(mvc, 0, "MoneyVacuum", "Money Vacuum");
             Host.Divider(mvc, Theme.ROW_H);
-            vacuumRange = Host.ValueRow(mvc, Theme.ROW_H, "Range:", "50", "Apply", delegate {
-                int v; if (int.TryParse(vacuumRange.Text, out v))
-                { v = Math.Max(10, Math.Min(200, v)); Host.SendCommand("SET:VacuumRange:" + v); }
+            vacuumRange = Host.StepperRow(mvc, Theme.ROW_H, "Range", "50", 10, 200, 10, delegate(int v) {
+                Host.SendCommand("SET:VacuumRange:" + v);
             });
             y += Theme.ROW_H * 2 + Theme.PAD;
 
