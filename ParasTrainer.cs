@@ -16,7 +16,7 @@ namespace ParasTrainer
     public class MainForm : Form
     {
         const int SIDEBAR_W = 210;
-        const int HEADER_H = 130;
+        const int HEADER_H = 142;
         const int FOOTER_H = 34;
         const int FORM_W = 730;
         const int FORM_H = 920;
@@ -343,10 +343,10 @@ namespace ParasTrainer
             Controls.Add(headerPanel);
 
             hdrTitle = new Label();
-            hdrTitle.Font = new Font("Segoe UI", 15f, FontStyle.Bold);
+            hdrTitle.Font = new Font("Segoe UI", 16f, FontStyle.Bold);
             hdrTitle.ForeColor = Theme.TEXT_PRIMARY;
             hdrTitle.BackColor = Color.Transparent;
-            hdrTitle.Location = new Point(90, 28);
+            hdrTitle.Location = new Point(24, 30);
             hdrTitle.AutoSize = true;
             headerPanel.Controls.Add(hdrTitle);
 
@@ -354,7 +354,7 @@ namespace ParasTrainer
             hdrSubtitle.Font = new Font("Segoe UI", 8.5f);
             hdrSubtitle.ForeColor = Theme.TEXT_SECONDARY;
             hdrSubtitle.BackColor = Color.Transparent;
-            hdrSubtitle.Location = new Point(92, 56);
+            hdrSubtitle.Location = new Point(26, 60);
             hdrSubtitle.AutoSize = true;
             headerPanel.Controls.Add(hdrSubtitle);
 
@@ -377,7 +377,7 @@ namespace ParasTrainer
             headerPanel.Controls.Add(hdrPlayBtn);
 
             hdrStatusDot = new Panel();
-            hdrStatusDot.SetBounds(92, 91, 10, 10);
+            hdrStatusDot.SetBounds(26, 95, 10, 10);
             hdrStatusDot.BackColor = Theme.STATUS_RED;
             hdrStatusDot.Paint += delegate(object s, PaintEventArgs e) {
                 e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
@@ -390,7 +390,7 @@ namespace ParasTrainer
             hdrStatusLabel.Font = new Font("Segoe UI", 9f, FontStyle.Bold);
             hdrStatusLabel.ForeColor = Theme.TEXT_SECONDARY;
             hdrStatusLabel.BackColor = Color.Transparent;
-            hdrStatusLabel.Location = new Point(108, 89);
+            hdrStatusLabel.Location = new Point(42, 93);
             hdrStatusLabel.AutoSize = true;
             headerPanel.Controls.Add(hdrStatusLabel);
 
@@ -398,7 +398,7 @@ namespace ParasTrainer
             hdrStatusDetail.Font = new Font("Segoe UI", 8f);
             hdrStatusDetail.ForeColor = Theme.TEXT_DISABLED;
             hdrStatusDetail.BackColor = Color.Transparent;
-            hdrStatusDetail.Location = new Point(108, 106);
+            hdrStatusDetail.Location = new Point(42, 110);
             hdrStatusDetail.AutoSize = true;
             headerPanel.Controls.Add(hdrStatusDetail);
         }
@@ -413,33 +413,96 @@ namespace ParasTrainer
                 (int)(a.B + (b.B - a.B) * t));
         }
 
+        Image[] gameBanners;
+        bool[] bannerTried;
+
+        Image GetBanner(int idx)
+        {
+            if (idx < 0 || idx >= plugins.Length) return null;
+            if (bannerTried == null) { bannerTried = new bool[plugins.Length]; gameBanners = new Image[plugins.Length]; }
+            if (bannerTried[idx]) return gameBanners[idx];
+            bannerTried[idx] = true;
+            string path = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "banners", plugins[idx].SteamId + ".jpg");
+            try
+            {
+                if (File.Exists(path))
+                {
+                    gameBanners[idx] = LoadImageUnlocked(path);
+                    return gameBanners[idx];
+                }
+            }
+            catch { gameBanners[idx] = null; }
+
+            // Not cached — fetch the Steam header art in the background, then refresh the header.
+            string sid = plugins[idx].SteamId;
+            int myIdx = idx;
+            System.Threading.ThreadPool.QueueUserWorkItem(delegate
+            {
+                try
+                {
+                    Directory.CreateDirectory(Path.GetDirectoryName(path));
+                    string url = "https://cdn.cloudflare.steamstatic.com/steam/apps/" + sid + "/header.jpg";
+                    using (System.Net.WebClient wc = new System.Net.WebClient())
+                        wc.DownloadFile(url, path);
+                    Image img = LoadImageUnlocked(path);
+                    gameBanners[myIdx] = img;
+                    try { if (headerPanel != null) headerPanel.BeginInvoke((Action)delegate { if (selectedGame == myIdx) headerPanel.Invalidate(); }); }
+                    catch { }
+                }
+                catch { }
+            });
+            return null;  // fallback header until the download lands
+        }
+
+        static Image LoadImageUnlocked(string path)
+        {
+            byte[] bytes = File.ReadAllBytes(path);
+            using (MemoryStream ms = new MemoryStream(bytes))
+                return new Bitmap(Image.FromStream(ms));
+        }
+
         void PaintHeader(object s, PaintEventArgs e)
         {
             Rectangle rect = headerPanel.ClientRectangle;
             if (rect.Width <= 1 || rect.Height <= 1) return;
             Graphics g = e.Graphics;
             g.SmoothingMode = SmoothingMode.AntiAlias;
-            // subtle accent-tinted diagonal wash
-            using (LinearGradientBrush br = new LinearGradientBrush(rect,
-                BlendToward(Theme.BG_HEADER, curAccent, 0.16f), Theme.BG_HEADER, 18f))
-                g.FillRectangle(br, rect);
-            // soft accent glow behind the game icon
-            using (GraphicsPath gp = new GraphicsPath())
+
+            Image banner = GetBanner(selectedGame);
+            if (banner != null)
             {
-                gp.AddEllipse(-46, -40, 190, 190);
-                using (PathGradientBrush pgb = new PathGradientBrush(gp))
+                // cover-scale the game art to fill the header, cropped to center
+                float scale = Math.Max((float)rect.Width / banner.Width, (float)rect.Height / banner.Height);
+                int bw = (int)(banner.Width * scale), bh = (int)(banner.Height * scale);
+                g.InterpolationMode = InterpolationMode.HighQualityBicubic;
+                g.DrawImage(banner, new Rectangle((rect.Width - bw) / 2, (rect.Height - bh) / 2, bw, bh));
+                // strong dark overlay on the left (keeps title/status legible), fading right so art shows
+                using (LinearGradientBrush ov = new LinearGradientBrush(rect,
+                    Color.FromArgb(244, Theme.BG_HEADER), Color.FromArgb(70, Theme.BG_HEADER), 0f))
+                    g.FillRectangle(ov, rect);
+                // darken the very bottom so the content seam reads cleanly
+                Rectangle br2 = new Rectangle(0, rect.Height - 52, rect.Width, 52);
+                using (LinearGradientBrush vov = new LinearGradientBrush(br2,
+                    Color.FromArgb(0, Theme.BG_MAIN), Color.FromArgb(215, Theme.BG_MAIN), 90f))
+                    g.FillRectangle(vov, br2);
+            }
+            else
+            {
+                // fallback (no Steam art): subtle accent wash + glow
+                using (LinearGradientBrush br = new LinearGradientBrush(rect,
+                    BlendToward(Theme.BG_HEADER, curAccent, 0.16f), Theme.BG_HEADER, 18f))
+                    g.FillRectangle(br, rect);
+                using (GraphicsPath gp = new GraphicsPath())
                 {
-                    pgb.CenterColor = Color.FromArgb(60, curAccent);
-                    pgb.SurroundColors = new Color[] { Color.FromArgb(0, curAccent) };
-                    g.FillPath(pgb, gp);
+                    gp.AddEllipse(-46, -40, 190, 190);
+                    using (PathGradientBrush pgb = new PathGradientBrush(gp))
+                    {
+                        pgb.CenterColor = Color.FromArgb(60, curAccent);
+                        pgb.SurroundColors = new Color[] { Color.FromArgb(0, curAccent) };
+                        g.FillPath(pgb, gp);
+                    }
                 }
             }
-            // game icon
-            if (selectedGame >= 0 && selectedGame < gameIcons.Length && gameIcons[selectedGame] != null)
-            {
-                try { g.DrawIcon(gameIcons[selectedGame], new Rectangle(24, 26, 50, 50)); } catch { }
-            }
-            // bottom hairline into the content
             using (Pen p = new Pen(Theme.BORDER))
                 g.DrawLine(p, 0, rect.Height - 1, rect.Width, rect.Height - 1);
         }
@@ -554,7 +617,7 @@ namespace ParasTrainer
             hdrSubtitle.Text = "Trainer";
             hdrVersion.Text = coreVersion[idx].Length > 0 ? "v" + coreVersion[idx] : "";
             int subtitleW = TextRenderer.MeasureText(hdrSubtitle.Text, hdrSubtitle.Font).Width;
-            hdrVersion.Location = new Point(98 + subtitleW, 57);
+            hdrVersion.Location = new Point(34 + subtitleW, 61);
 
             if (isConnected[idx])
             {
