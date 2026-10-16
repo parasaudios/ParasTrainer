@@ -16,10 +16,10 @@ namespace ParasTrainer
         public override Color AccentDimColor { get { return Color.FromArgb(19, 78, 74); } }
         public override string IconPath { get { return @"C:\Users\Para\RoR2Trainer\app.ico"; } }
         public override string IpcDirectory { get { return Path.Combine(Path.GetTempPath(), "ror2_trainer"); } }
-        public override string PluginVersion { get { return "76"; } }
+        public override string PluginVersion { get { return "77"; } }
 
         private TextBox itemMultInput;
-        private TextBox iemDmg, iemAtkSpd, iemCrit, iemMoveSpd, iemSurv, iemOther, iemOnHit, iemBleed;
+        private TextBox iemDmg, iemAtkSpd, iemCrit, iemMoveSpd, iemSurv, iemOther, iemOnHit, iemBleed, iemOnKill;
         private TextBox vacuumRange, itemVacRange, lunarInput, goldInput;
         private ComboBox buffCombo, respawnMode, targetCombo, itemCombo, bodyCombo, hexTargetCombo, tierTargetCombo;
         private TextBox itemSearch, lootRange, tierW, tierG, tierR;
@@ -211,16 +211,18 @@ namespace ParasTrainer
 
             // ITEM EFFECT MULTIPLIER (client-side transpiler — works as non-host)
             y = Host.SectionHeader(c, y, "ITEM EFFECT MULTIPLIER");
-            Panel iemc = Host.MakeCard(c, y, 10);
+            Panel iemc = Host.MakeCard(c, y, 11);
             Host.ToggleRow(iemc, 0, "ItemEffectMult", "Item Effect Multiplier");
             Host.Divider(iemc, Theme.ROW_H);
-            // On-Hit scales proc items read in ProcessHitEnemy (missiles, Ukulele, bands, meat hook…);
-            // Bleed / DoT scales bleed items (Tri-Tip, Shatterspleen, Needletick). Both were formerly
-            // lumped under "All Other".
-            string[] iemLabels = { "Damage", "Attack Speed", "Crit", "Move Speed", "Survival", "On-Hit", "Bleed / DoT", "All Other" };
-            string[] iemKeys = { "IemDamage", "IemAtkSpd", "IemCrit", "IemMoveSpd", "IemSurvival", "IemOnHit", "IemBleed", "IemOther" };
-            TextBox[] iemInputs = new TextBox[8];
-            for (int i = 0; i < 8; i++)
+            // Stat sliders (Damage..Survival, All Other) scale items read in RecalculateStats → work as
+            // a NON-HOST (client-side). The proc sliders are server-authoritative so they only take
+            // effect when HOSTING (hence "(host)"): On-Hit = ProcessHitEnemy procs (missiles, Ukulele,
+            // bands, meat hook); Bleed / DoT = Tri-Tip/Shatterspleen/Needletick; On-Kill / Shrine =
+            // OnCharacterDeath procs (Ghor's, Gasoline, Wisp, daggers…) + Chance Doll shrine luck.
+            string[] iemLabels = { "Damage", "Attack Speed", "Crit", "Move Speed", "Survival", "On-Hit (host)", "Bleed / DoT (host)", "On-Kill / Shrine (host)", "All Other" };
+            string[] iemKeys = { "IemDamage", "IemAtkSpd", "IemCrit", "IemMoveSpd", "IemSurvival", "IemOnHit", "IemBleed", "IemOnKill", "IemOther" };
+            TextBox[] iemInputs = new TextBox[9];
+            for (int i = 0; i < 9; i++)
             {
                 int row = i + 1;
                 string iemKey = iemKeys[i];
@@ -228,25 +230,25 @@ namespace ParasTrainer
                 iemInputs[i] = Host.StepperRow(iemc, Theme.ROW_H * row, iemLabels[i], "1", 1, 100, 1, delegate(int v) {
                     Host.SendCommand("SET:" + iemKey + ":" + v);
                 });
-                if (i < 7) Host.Divider(iemc, Theme.ROW_H * (row + 1));
+                if (i < 8) Host.Divider(iemc, Theme.ROW_H * (row + 1));
             }
             iemDmg = iemInputs[0]; iemAtkSpd = iemInputs[1]; iemCrit = iemInputs[2];
             iemMoveSpd = iemInputs[3]; iemSurv = iemInputs[4]; iemOnHit = iemInputs[5];
-            iemBleed = iemInputs[6]; iemOther = iemInputs[7];
-            Host.Divider(iemc, Theme.ROW_H * 9);
-            Button setAllBtn = Host.ActionBtn(iemc, Theme.PAD, Theme.ROW_H * 9 + 7, "Set All", Theme.CARD_W - Theme.PAD * 2);
+            iemBleed = iemInputs[6]; iemOnKill = iemInputs[7]; iemOther = iemInputs[8];
+            Host.Divider(iemc, Theme.ROW_H * 10);
+            Button setAllBtn = Host.ActionBtn(iemc, Theme.PAD, Theme.ROW_H * 10 + 7, "Set All", Theme.CARD_W - Theme.PAD * 2);
             setAllBtn.BackColor = Color.FromArgb(15, 55, 30);
             setAllBtn.ForeColor = Theme.ACCENT_GREEN;
             setAllBtn.Click += delegate {
-                string[] keys = { "IemDamage", "IemAtkSpd", "IemCrit", "IemMoveSpd", "IemSurvival", "IemOnHit", "IemBleed", "IemOther" };
-                TextBox[] tbs = { iemDmg, iemAtkSpd, iemCrit, iemMoveSpd, iemSurv, iemOnHit, iemBleed, iemOther };
-                for (int i = 0; i < 8; i++)
+                string[] keys = { "IemDamage", "IemAtkSpd", "IemCrit", "IemMoveSpd", "IemSurvival", "IemOnHit", "IemBleed", "IemOnKill", "IemOther" };
+                TextBox[] tbs = { iemDmg, iemAtkSpd, iemCrit, iemMoveSpd, iemSurv, iemOnHit, iemBleed, iemOnKill, iemOther };
+                for (int i = 0; i < 9; i++)
                 {
                     int v; if (int.TryParse(tbs[i].Text, out v))
                     { v = Math.Max(1, Math.Min(100, v)); Host.SendCommand("SET:" + keys[i] + ":" + v); Host.AppliedAt[tbs[i]] = DateTime.Now; }
                 }
             };
-            y += Theme.ROW_H * 10 + Theme.PAD;
+            y += Theme.ROW_H * 11 + Theme.PAD;
 
             // APPLY BUFF
             y = Host.SectionHeader(c, y, "APPLY BUFF");
@@ -711,6 +713,10 @@ namespace ParasTrainer
             else if (key == "IemBleed" && iemBleed != null)
             {
                 if (int.TryParse(value, out i)) Host.SyncInput(iemBleed, i.ToString());
+            }
+            else if (key == "IemOnKill" && iemOnKill != null)
+            {
+                if (int.TryParse(value, out i)) Host.SyncInput(iemOnKill, i.ToString());
             }
             else if (key == "VacuumRange" && vacuumRange != null)
             {
